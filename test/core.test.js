@@ -84,33 +84,52 @@ test('migrasi schedOn lama ke autoSrc', () => {
   assert.equal(SCS.autoSrcOf({ schedOn: false }), 'threshold');
   assert.equal(SCS.autoSrcOf({ autoSrc: 'schedule', schedOn: false }), 'schedule');
 });
-test('multi-slot: nyala bila salah satu slot aktif', () => {
-  const slots = [{ start: '09:00', dur: 10 }, { start: '14:00', dur: 15 }, { start: '18:00', dur: 10 }];
-  assert.equal(SCS.anyScheduleActive(545, slots), true);   // 09:05
-  assert.equal(SCS.anyScheduleActive(849, slots), true);   // 14:09
-  assert.equal(SCS.anyScheduleActive(600, slots), false);  // 10:00, di luar semua
-  assert.equal(SCS.anyScheduleActive(600, []), false);
+test('multi-slot bertanggal: hanya jalan di tanggalnya', () => {
+  // 25 Sep 2026 20:49 WIB = epoch berikut (UTC+7):
+  const NOW = Date.UTC(2026, 8, 25, 13, 49); // 20:49 WIB
+  const slots = [
+    { date: '2026-09-25', start: '20:50', dur: 10 },
+    { date: '2026-09-26', start: '09:00', dur: 10 },
+  ];
+  assert.equal(SCS.slotState(slots[0], NOW), 'future');
+  assert.equal(SCS.slotState(slots[0], Date.UTC(2026, 8, 25, 13, 55)), 'active'); // 20:55
+  assert.equal(SCS.slotState(slots[0], Date.UTC(2026, 8, 25, 14, 5)), 'past');    // 21:05
+  assert.equal(SCS.slotState(slots[1], NOW), 'future'); // beda tanggal -> future
+  assert.equal(SCS.anyScheduleActive(NOW, slots), false);
+  assert.equal(SCS.anyScheduleActive(Date.UTC(2026, 8, 25, 13, 55), slots), true);
+  assert.equal(SCS.anyScheduleActive(Date.UTC(2026, 8, 26, 2, 5), slots), true); // 26-09 09:05 WIB
 });
 
-test('multi-slot: bungkus tengah malam per slot', () => {
-  const slots = [{ start: '23:55', dur: 10 }];
-  assert.equal(SCS.anyScheduleActive(1439, slots), true);
-  assert.equal(SCS.anyScheduleActive(4, slots), true);
-  assert.equal(SCS.anyScheduleActive(5, slots), false);
+test('multi-slot: slot kemarin tidak ikut nyala hari ini', () => {
+  const NOW = Date.UTC(2026, 8, 26, 2, 0); // 26-09 09:00 WIB
+  const slots = [{ date: '2026-09-25', start: '09:00', dur: 10 }];
+  assert.equal(SCS.anyScheduleActive(NOW, slots), false);
+  assert.deepEqual(SCS.prunePastSlots(slots, NOW), []);
 });
 
 test('schedulesOf: migrasi format lama + filter rusak', () => {
-  assert.deepEqual(SCS.schedulesOf({ schedules: [{ start: '09:00', dur: 10 }] }), [{ start: '09:00', dur: 10 }]);
-  assert.deepEqual(SCS.schedulesOf({ schedStart: '12:00', schedDur: 10 }), [{ start: '12:00', dur: 10 }]);
-  assert.deepEqual(SCS.schedulesOf({ schedules: [{ start: 'xx', dur: 10 }, { start: '10:00', dur: 0 }] }), []);
-  assert.deepEqual(SCS.schedulesOf({}), []);
+  const T = '2026-09-25';
+  assert.deepEqual(SCS.schedulesOf({ schedules: [{ date: T, start: '09:00', dur: 10 }] }, T), [{ date: T, start: '09:00', dur: 10 }]);
+  assert.deepEqual(SCS.schedulesOf({ schedules: [{ start: '09:00', dur: 10 }] }, T), [{ date: T, start: '09:00', dur: 10 }]); // tanpa tanggal -> hari ini
+  assert.deepEqual(SCS.schedulesOf({ schedStart: '12:00', schedDur: 10 }, T), [{ date: T, start: '12:00', dur: 10 }]);
+  assert.deepEqual(SCS.schedulesOf({ schedules: [{ date: 'xx', start: '09:00', dur: 10 }, { date: T, start: '10:00', dur: 0 }] }, T), [{ date: T, start: '10:00', dur: 1 }]);
+  assert.deepEqual(SCS.schedulesOf({}, T), []);
 });
 
-test('nextSchedule: slot terdekat berikutnya', () => {
-  const slots = [{ start: '09:00', dur: 10 }, { start: '14:00', dur: 10 }];
-  assert.equal(SCS.nextSchedule(600, slots).start, '14:00');  // 10:00 -> 14:00 hari ini (delta 240)
-  assert.equal(SCS.nextSchedule(541, slots).start, '14:00');  // 09:01 (delta 1379) vs 14:00 (delta 299)
-  assert.equal(SCS.nextSchedule(600, []), null);
+test('nextSchedule bertanggal: paling dekat (termasuk yang sedang jalan)', () => {
+  const NOW = Date.UTC(2026, 8, 25, 13, 49); // 25-09 20:49 WIB
+  const slots = [
+    { date: '2026-09-25', start: '20:50', dur: 10 },
+    { date: '2026-09-26', start: '09:00', dur: 10 },
+  ];
+  assert.equal(SCS.nextSchedule(NOW, slots).start, '20:50');
+  assert.equal(SCS.nextSchedule(Date.UTC(2026, 8, 25, 13, 55), slots).active, true);
+  assert.equal(SCS.nextSchedule(Date.UTC(2026, 8, 26, 3, 0), slots), null); // semua lewat
+});
+
+test('wibDateTimeMs: konversi WIB ke epoch', () => {
+  assert.equal(SCS.wibDateTimeMs('2026-09-25', '20:50'), Date.UTC(2026, 8, 25, 13, 50));
+  assert.ok(!isFinite(SCS.wibDateTimeMs('xx', '20:50')));
 });
 test('jumlah kartu tampil ikut sensor terdeteksi', () => {
   assert.equal(SCS.visibleCount(null), null);
