@@ -204,10 +204,12 @@ void applyLogic(float avg) {
 void sendTelemetry(float avg) {
   char buf[340];
   bool schNow = schedActiveNow();
+  String t[6];
+  for (int i = 0; i < 6; i++) t[i] = fresh[i] ? String(curT[i], 2) : "null";
   snprintf(buf, sizeof(buf),
-    "{\"t1\":%.2f,\"t2\":%.2f,\"t3\":%.2f,\"t4\":%.2f,\"t5\":%.2f,\"t6\":%.2f,"
+    "{\"t1\":%s,\"t2\":%s,\"t3\":%s,\"t4\":%s,\"t5\":%s,\"t6\":%s,"
     "\"avg\":%.2f,\"ssr\":%d,\"sch\":%d,\"n\":%d,\"mode\":\"%s\",\"rssi\":%d,\"heap\":%u,\"ts\":{\".sv\":\"timestamp\"}}",
-    curT[0], curT[1], curT[2], curT[3], curT[4], curT[5],
+    t[0].c_str(), t[1].c_str(), t[2].c_str(), t[3].c_str(), t[4].c_str(), t[5].c_str(),
     avg, ssrOn ? 1 : 0, schNow ? 1 : 0, devCount, ctlMode, WiFi.RSSI(), (unsigned)ESP.getFreeHeap());
   if (fbPut("telemetry/latest", String(buf))) printSensors(avg);
   else Serial.println("Gagal kirim telemetri, cek WiFi/Firebase.");
@@ -215,10 +217,13 @@ void sendTelemetry(float avg) {
 
 void sendLog(float avg) {
   char buf[260];
+  String t[6];
+  for (int i = 0; i < 6; i++) t[i] = fresh[i] ? String(curT[i], 2) : "null";
   snprintf(buf, sizeof(buf),
-    "{\"t1\":%.2f,\"t2\":%.2f,\"t3\":%.2f,\"t4\":%.2f,\"t5\":%.2f,\"t6\":%.2f,"
+    "{\"t1\":%s,\"t2\":%s,\"t3\":%s,\"t4\":%s,\"t5\":%s,\"t6\":%s,"
     "\"avg\":%.2f,\"ssr\":%d,\"ts\":{\".sv\":\"timestamp\"}}",
-    curT[0], curT[1], curT[2], curT[3], curT[4], curT[5], avg, ssrOn ? 1 : 0);
+    t[0].c_str(), t[1].c_str(), t[2].c_str(), t[3].c_str(), t[4].c_str(), t[5].c_str(),
+    avg, ssrOn ? 1 : 0);
   fbPost("telemetry/log", String(buf));
   char st[220];
   snprintf(st, sizeof(st),
@@ -299,7 +304,15 @@ void loop() {
     tScan = now;
     dallas.begin();
     int n = dallas.getDeviceCount();
-    if (n != devCount) { devCount = n; Serial.printf("Rescan bus: %d sensor\n", devCount); }
+    if (n != devCount) {
+      char buf[120];
+      snprintf(buf, sizeof(buf),
+        "{\"type\":\"rescan\",\"reason\":\"bus %d -> %d, peta S1..S%d berubah\",\"ts\":{\".sv\":\"timestamp\"}}",
+        devCount, n, n);
+      fbPost("events", String(buf));
+      devCount = n;
+      Serial.printf("Rescan bus: %d sensor (peta S1..Sn berubah)\n", devCount);
+    }
   }
   delay(10);
 }

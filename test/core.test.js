@@ -31,6 +31,11 @@ test('rata-rata mengabaikan sensor putus (NaN)', () => {
   assert.ok(Number.isNaN(SCS.avgOf([NaN, NaN])));
 });
 
+test('rata-rata mengabaikan null firmware (titik putus)', () => {
+  assert.equal(SCS.avgOf([30.1, null, 29.9, 30.0, 30.1, 30.0]), 30.02);
+  assert.ok(Number.isNaN(SCS.avgOf([null, null])));
+});
+
 test('prune log keeps newest 120', () => {
   const logs = Array.from({ length: 130 }, (_, i) => ({ t: i }));
   assert.equal(SCS.pruneLogs(logs, 120).length, 120);

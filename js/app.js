@@ -70,8 +70,14 @@ function renderSensors(){
   const shown = temps.slice(0, renderedCount);
   let mn = 99, mx = -99;
   shown.forEach((t,i)=>{
-    mn = Math.min(mn,t); mx = Math.max(mx,t);
     const el = $('sensor'+i); if(!el) return;
+    if (t == null || !isFinite(t)){ // titik putus (null dari firmware): tandai, jangan hitung
+      el.querySelector('.s-temp').textContent = '--';
+      el.querySelector('.bar i').style.width = '4%';
+      const st0 = el.querySelector('.s-state'); st0.textContent = 'PUTUS'; st0.className = 's-state off';
+      return;
+    }
+    mn = Math.min(mn,t); mx = Math.max(mx,t);
     el.querySelector('.s-temp').textContent = t.toFixed(1)+'°';
     el.querySelector('.s-temp').style.color = tempColor(t);
     const pct = Math.min(100, Math.max(4, (t-25)/(38-25)*100));
@@ -83,6 +89,11 @@ function renderSensors(){
     else { st.textContent = 'NORMAL'; st.className = 's-state ok'; }
   });
   const avg = SCS.avgOf(shown);
+  if (!isFinite(avg)){ // semua titik putus: tampil saja, jangan catat
+    $('avgTemp').textContent = '--'; $('minTemp').textContent = '--'; $('maxTemp').textContent = '--';
+    const pill0 = $('avgStatus'); pill0.textContent = 'TIDAK ADA DATA'; pill0.className = 'status-pill normal';
+    return NaN;
+  }
   $('avgTemp').textContent = avg.toFixed(1);
   $('minTemp').textContent = mn.toFixed(1)+'°C';
   $('maxTemp').textContent = mx.toFixed(1)+'°C';
@@ -139,7 +150,8 @@ function onNewData(arr){
   const st = $('sensorTitle'); if (st) st.textContent = SCS.sensorTitle(sensorCount);
   if (renderedCount === 0) return;
   const avg = renderSensors();
-  history.push({ t: lastUpdate, s: temps.map(v=>+v.toFixed(2)), avg:+avg.toFixed(2) });
+  if (!isFinite(avg)) return; // tanpa data valid: tampil saja, jangan catat
+  history.push({ t: lastUpdate, s: temps.map(v => v == null || !isFinite(v) ? null : +v.toFixed(2)), avg:+avg.toFixed(2) });
   if (history.length > 1800) history = history.slice(-1800);
   localStorage.setItem('scs_hist', JSON.stringify(history.slice(-600)));
   drawChart();
@@ -154,8 +166,9 @@ function drawChart(){
   ctx.clearRect(0,0,W,H);
   if (history.length < 2){ ctx.fillStyle='#93a3c4'; ctx.font='28px sans-serif'; ctx.fillText('Menunggu data…', 30, 60); return; }
   const data = history.slice(-720);
-  let mn = 99, mx = -99;
-  data.forEach(d=>{ d.s.forEach(v=>{mn=Math.min(mn,v);mx=Math.max(mx,v);}); });
+  let mn = 99, mx = -99, adaData = false;
+  data.forEach(d=>{ d.s.forEach(v=>{ if (v != null && isFinite(v)){ adaData = true; mn=Math.min(mn,v);mx=Math.max(mx,v); } }); });
+  if (!adaData){ ctx.fillStyle='#93a3c4'; ctx.font='28px sans-serif'; ctx.fillText('Menunggu data…', 30, 60); return; }
   mn = Math.min(mn, CFG.threshold-2)-0.3; mx = Math.max(mx, CFG.threshold+2)+0.3;
   const X = i => 60 + i/(data.length-1)*(W-80);
   const Y = v => 20 + (1-(v-mn)/(mx-mn))*(H-70);
@@ -173,7 +186,8 @@ function drawChart(){
     data.forEach((d,i)=>{ const y=Y(get(d)); i?ctx.lineTo(X(i),y):ctx.moveTo(X(i),y); });
     ctx.stroke();
   };
-  for(let s=0;s<renderedCount;s++) draw(s, COLORS[s]+'cc', d=>d.s[s]);
+  for(let s=0;s<renderedCount;s++) draw(s, COLORS[s]+'cc', d=>{ const v=d.s[s]; return (v == null || !isFinite(v)) ? NaN : v; });
+  if ($('showAvg').checked) draw('avg', AVG_COLOR, d=>d.avg);
   if ($('showAvg').checked) draw('avg', AVG_COLOR, d=>d.avg);
 }
 window.addEventListener('resize', drawChart);
@@ -183,7 +197,7 @@ $('btnClearChart').onclick = ()=>{ history=[]; localStorage.removeItem('scs_hist
 // ---------- LOG 1 JAM ----------
 function addLogRow(avg){
   lastLogTime = Date.now();
-  const row = { t: lastLogTime, s: temps.map(v=>+v.toFixed(1)), avg:+avg.toFixed(1), spray: sprinklerOn?1:0 };
+  const row = { t: lastLogTime, s: temps.map(v => v == null || !isFinite(v) ? null : +v.toFixed(1)), avg:+avg.toFixed(1), spray: sprinklerOn?1:0 };
   logs.unshift(row); logs = logs.slice(0,120);
   localStorage.setItem('scs_logs', JSON.stringify(logs));
   if (fbConnected && window.SCSFirebase) SCSFirebase.pushLog(row);
@@ -198,7 +212,7 @@ function renderLogs(){
     const tr = document.createElement('tr');
     const time = new Date(r.t).toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',second:'2-digit'});
     const hot = r.avg >= CFG.threshold;
-    tr.innerHTML = `<td>${time}</td>` + r.s.slice(0, renderedCount).map(v=>`<td class="${v>=CFG.threshold?'hot':'cold'}">${v.toFixed(1)}</td>`).join('')
+    tr.innerHTML = `<td>${time}</td>` + r.s.slice(0, renderedCount).map(v=>(v == null || !isFinite(v))?`<td>—</td>`:`<td class="${v>=CFG.threshold?'hot':'cold'}">${v.toFixed(1)}</td>`).join('')
       + `<td><b>${r.avg.toFixed(1)}</b></td><td>${hot?'🔥 PANAS':'✅ OK'}</td><td>${r.spray?'💦 ON':'—'}</td>`;
     tb.appendChild(tr);
   });
