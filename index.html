@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Smart Cow Sprinkler System</title>
-<link rel="stylesheet" href="css/style.css?v=6" />
+<link rel="stylesheet" href="css/style.css?v=8" />
 </head>
 <body>
 <div class="bg-decor"></div>
@@ -18,6 +18,7 @@
     </div>
   </div>
   <div class="top-right">
+    <button id="themeBtn" class="theme-btn" title="Ganti light/dark mode">🌙</button>
     <div class="clock-card">
       <div id="clock" class="clock">--:--:--</div>
       <div id="dateLine" class="date-line">Memuat waktu…</div>
@@ -57,8 +58,7 @@
         <button id="btnSprayOn" class="btn green" disabled>💦 Nyalakan Manual</button>
         <button id="btnSprayOff" class="btn red" disabled>⛔ Matikan Manual</button>
       </div>
-      <div class="hint">Mode manual mengunci kontrol ke tombol di atas.</div>
-      <div id="fbStatus" class="hint">Menghubungkan ke Firebase…</div>
+      <div id="fbStatus" class="hint" style="display:none"></div>
     </div>
   </section>
 
@@ -90,7 +90,16 @@
     </div>
 
     <div class="card">
-      <h3>⚙️ Pengaturan Threshold &amp; Proteksi</h3>
+      <h3>⚙️ Pengaturan Otomatis — Pilih Salah Satu</h3>
+      <div class="auto-src">
+        <label class="src-card"><input type="radio" name="autoSrc" id="srcThreshold" value="threshold" checked />
+          <div><b>🌡️ Berdasarkan Suhu</b><span>Threshold + hysteresis</span></div>
+        </label>
+        <label class="src-card"><input type="radio" name="autoSrc" id="srcSchedule" value="schedule" />
+          <div><b>🗓️ Jadwal Harian</b><span>Jam mulai + lama nyala</span></div>
+        </label>
+      </div>
+      <div id="threshGroup">
       <div class="form-grid">
         <label>Threshold semprot (°C)
           <input id="inThreshold" type="number" step="0.1" min="25" max="40" value="30.0" />
@@ -98,6 +107,13 @@
         <label>Hysteresis (°C)
           <input id="inHyst" type="number" step="0.1" min="0.2" max="3" value="1.0" />
         </label>
+      </div>
+      <div class="range-row">
+        <input id="rangeThreshold" type="range" min="27" max="35" step="0.1" value="30" />
+      </div>
+      </div>
+      <div id="protectGroup">
+      <div class="form-grid">
         <label>Durasi semprot maks (detik)
           <input id="inMaxDur" type="number" step="1" min="10" max="600" value="120" />
         </label>
@@ -105,12 +121,9 @@
           <input id="inCooldown" type="number" step="1" min="0" max="600" value="60" />
         </label>
       </div>
-      <div class="range-row">
-        <input id="rangeThreshold" type="range" min="27" max="35" step="0.1" value="30" />
       </div>
       <button id="btnSaveCfg" class="btn blue full">💾 Simpan Pengaturan</button>
-      <div class="sched-box">
-        <label class="sched-toggle"><input type="checkbox" id="inSchedOn" /> Jadwal semprot harian (mode otomatis)</label>
+      <div class="sched-box" id="schedGroup">
         <div class="form-grid">
           <label>Jam mulai (WIB)
             <input id="inSchedStart" type="time" value="12:00" />
@@ -120,11 +133,6 @@
           </label>
         </div>
         <div id="schedHint" class="hint"></div>
-      </div>
-      <div class="logic-box">
-        <b>Logika Otomatis:</b>
-        <code>IF avg ≥ threshold → SSR ON (solenoid buka) • IF avg ≤ threshold − hysteresis → SSR OFF</code>
-        <div id="logicPreview" class="hint"></div>
       </div>
     </div>
   </section>
@@ -184,9 +192,9 @@
 </main>
 
 <footer>Smart Cow Sprinkler • Semester 5 • Web Projek IoT • Firebase Realtime • ESP32 • DS18B20</footer>
-<script src="js/core.js?v=6"></script>
-<script src="js/config.js?v=6"></script>
-<script src="js/firebase-config.js?v=6"></script>
+<script src="js/core.js?v=8"></script>
+<script src="js/config.js?v=8"></script>
+<script src="js/firebase-config.js?v=8"></script>
 <script>
 window.addEventListener('error', function (e) {
   if (!window.SCSFirebase && e.message && e.message !== 'Script error.') {
@@ -195,7 +203,7 @@ window.addEventListener('error', function (e) {
   }
 }, true);
 </script>
-<script type="module" src="js/firebase.js?v=6"></script>
-<script src="js/app.js?v=6"></script>
+<script type="module" src="js/firebase.js?v=8"></script>
+<script src="js/app.js?v=8"></script>
 </body>
 </html>

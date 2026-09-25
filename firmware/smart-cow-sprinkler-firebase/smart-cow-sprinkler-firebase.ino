@@ -54,6 +54,7 @@ int devCount = 0;
 
 char ctlMode[8] = "auto";
 char ctlManual[8] = "off";
+char ctlAutoSrc[10] = "threshold"; // threshold | schedule (eksklusif)
 char ctlSchStart[8] = "12:00";
 int ctlSchDur = 10;
 bool ctlSchOn = false;
@@ -180,21 +181,27 @@ void applyLogic(float avg) {
   unsigned long now = millis();
   bool autoMode = strcmp(ctlMode, "auto") == 0;
   if (autoMode) {
-    if (!ssrOn && avg >= ctlThreshold) {
-      if ((now - lastSprayEnd) / 1000UL >= (unsigned long)ctlCooldown)
-        setRelay(true, "auto_on", "avg>=threshold", avg);
-    } else if (ssrOn && avg <= ctlThreshold - ctlHyst) {
-      setRelay(false, "auto_off", "hysteresis", avg);
+    bool isSchedule = strcmp(ctlAutoSrc, "schedule") == 0;
+    if (isSchedule) {
+      // EKSKLUSIF jadwal: abaikan threshold, hanya window jadwal.
+      bool sch = schedActiveNow();
+      if (sch && !ssrOn) setRelay(true, "jadwal_on", "jadwal " + String(ctlSchStart), avg);
+      else if (!sch && ssrOn) setRelay(false, "jadwal_off", "jadwal selesai", avg);
+      schedWas = sch;
+      if (ssrOn && sprayStart && (now - sprayStart) / 1000UL >= (unsigned long)ctlMaxDur)
+        setRelay(false, "protect_off", "durasi maks", avg);
+    } else {
+      // EKSKLUSIF threshold: abaikan jadwal.
+      if (!ssrOn && avg >= ctlThreshold) {
+        if ((now - lastSprayEnd) / 1000UL >= (unsigned long)ctlCooldown)
+          setRelay(true, "auto_on", "avg>=threshold", avg);
+      } else if (ssrOn && avg <= ctlThreshold - ctlHyst) {
+        setRelay(false, "auto_off", "hysteresis", avg);
+      }
+      if (ssrOn && sprayStart && (now - sprayStart) / 1000UL >= (unsigned long)ctlMaxDur)
+        setRelay(false, "protect_off", "durasi maks", avg);
+      schedWas = false;
     }
-    if (ssrOn && sprayStart && (now - sprayStart) / 1000UL >= (unsigned long)ctlMaxDur)
-      setRelay(false, "protect_off", "durasi maks", avg);
-    // Overlay jadwal: paksa nyala di window (lewati cooldown, perintah eksplisit),
-    // matikan saat window selesai kecuali suhu masih menahan via threshold.
-    bool sch = schedActiveNow();
-    if (sch && !ssrOn) setRelay(true, "jadwal_on", "jadwal " + String(ctlSchStart), avg);
-    else if (!sch && schedWas && ssrOn && avg < ctlThreshold)
-      setRelay(false, "jadwal_off", "jadwal selesai", avg);
-    schedWas = sch;
   } else {
     bool want = strcmp(ctlManual, "on") == 0;
     if (want && !ssrOn) setRelay(true, "manual_on", "perintah web", avg);
@@ -232,9 +239,9 @@ void pollControl() {
   String js = fbGet("control");
   if (js.length() == 0) return;
   if (js == "null") { // belum ada, tulis default dari firmware
-    char buf[280];
+    char buf[300];
     snprintf(buf, sizeof(buf),
-      "{\"mode\":\"auto\",\"manualSsr\":\"off\",\"threshold\":%.1f,\"hysteresis\":%.1f,"
+      "{\"mode\":\"auto\",\"autoSrc\":\"threshold\",\"manualSsr\":\"off\",\"threshold\":%.1f,\"hysteresis\":%.1f,"
       "\"maxDuration\":%d,\"cooldown\":%d,\"schOn\":0,\"schStart\":\"12:00\",\"schDur\":10,"
       "\"updatedBy\":\"device\"}",
       ctlThreshold, ctlHyst, ctlMaxDur, ctlCooldown);
@@ -242,14 +249,17 @@ void pollControl() {
     return;
   }
   jStr(js, "mode", ctlMode, sizeof(ctlMode), "auto");
+  jStr(js, "autoSrc", ctlAutoSrc, sizeof(ctlAutoSrc), "");
   jStr(js, "manualSsr", ctlManual, sizeof(ctlManual), "off");
-  ctlThreshold = jNum(js, "threshold", ctlThreshold);
-  ctlHyst = jNum(js, "hysteresis", ctlHyst);
+  ctlThreshold = jNum(js, "threshold", ctlThreshold);  ctlHyst = jNum(js, "hysteresis", ctlHyst);
   ctlMaxDur = (int)jNum(js, "maxDuration", ctlMaxDur);
   ctlCooldown = (int)jNum(js, "cooldown", ctlCooldown);
   ctlSchOn = jNum(js, "schOn", ctlSchOn ? 1 : 0) > 0.5;
   jStr(js, "schStart", ctlSchStart, sizeof(ctlSchStart), "12:00");
   ctlSchDur = (int)jNum(js, "schDur", ctlSchDur);
+  // Migrasi: kalau web lama belum kirim autoSrc, turunkan dari schOn.
+  if (strlen(ctlAutoSrc) == 0) strncpy(ctlAutoSrc, ctlSchOn ? "schedule" : "threshold", sizeof(ctlAutoSrc));
+  ctlAutoSrc[sizeof(ctlAutoSrc) - 1] = 0;
 }
 
 void printAddresses() {

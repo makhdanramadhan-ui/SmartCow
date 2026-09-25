@@ -11,6 +11,21 @@
     if (on && avg <= cfg.threshold - cfg.hysteresis) return 'off';
     return 'stay';
   }
+  // Mode otomatis eksklusif: 'threshold' ATAU 'schedule', tidak dua-duanya.
+  // schedActive = hasil scheduleActive(now, start, dur).
+  function autoSrcOf(cfg) {
+    if (cfg && (cfg.autoSrc === 'schedule' || cfg.autoSrc === 'threshold')) return cfg.autoSrc;
+    if (cfg && cfg.schedOn) return 'schedule'; // migrasi dari format lama
+    return 'threshold';
+  }
+  function decideAuto(avg, on, cfg, schedActive) {
+    if (autoSrcOf(cfg) === 'schedule') {
+      if (schedActive && !on) return 'on';
+      if (!schedActive && on) return 'off';
+      return 'stay';
+    }
+    return decideSprinkler(avg, on, cfg);
+  }
   function classify(avg, cfg) {
     if (avg >= cfg.threshold + 1) return 'bahaya';
     if (avg >= cfg.threshold) return 'waspada';
@@ -53,5 +68,5 @@
     const st = r.avg >= threshold ? 'PANAS' : 'NORMAL';
     return `"${w}",${r.s.join(',')},${r.avg},${st},${r.spray ? 'ON' : 'OFF'}`;
   }
-  return { decideSprinkler, classify, avgOf, pruneLogs, logToCsv, hmToMin, scheduleActive, sensorTitle, visibleCount };
+  return { decideSprinkler, decideAuto, autoSrcOf, classify, avgOf, pruneLogs, logToCsv, hmToMin, scheduleActive, sensorTitle, visibleCount };
 });
