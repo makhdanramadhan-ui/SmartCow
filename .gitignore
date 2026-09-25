@@ -1,2 +1,7 @@
 # Secret lokal, jangan push
 js/firebase-config.js
+esp32/include/secrets.h
+esp32/.pio/
+esp32/.vscode/
+
+.firebase/
