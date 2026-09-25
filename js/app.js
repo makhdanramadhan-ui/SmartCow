@@ -20,6 +20,20 @@ try { history = JSON.parse(localStorage.getItem('scs_hist') || '[]'); } catch { 
 if (!Array.isArray(history)) history = [];
 history = history.slice(-1800);
 
+// ---------- THEME (light/dark) ----------
+function curTheme(){ return localStorage.getItem('scs_theme') || 'dark'; }
+function applyTheme(t){
+  document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+  localStorage.setItem('scs_theme', document.documentElement.dataset.theme);
+  const b = $('themeBtn'); if (b) b.textContent = document.documentElement.dataset.theme === 'light' ? '☀️' : '🌙';
+  if (typeof drawChart === 'function') drawChart();
+}
+function chartTheme(){
+  return document.documentElement.dataset.theme === 'light'
+    ? { grid: '#cbd5e1', txt: '#475569', empty: '#64748b' }
+    : { grid: '#223152', txt: '#93a3c4', empty: '#93a3c4' };
+}
+
 // ---------- WIB CLOCK ----------
 function tickClock(){
   const now = new Date();
@@ -91,7 +105,6 @@ function renderSensors(){
   if (avg >= CFG.threshold + 1){ pill.textContent='🔥 STRESS PANAS — SEMPROT!'; pill.className='status-pill bahaya'; }
   else if (avg >= CFG.threshold){ pill.textContent='⚠️ WASPADA — AMBANG TERSENTUH'; pill.className='status-pill waspada'; }
   else { pill.textContent='✅ NORMAL — SAPI NYAMAN'; pill.className='status-pill normal'; }
-  $('logicPreview').textContent = `Saat ini: avg ${avg.toFixed(1)}°C vs ON ≥ ${CFG.threshold.toFixed(1)}°C / OFF ≤ ${(CFG.threshold-CFG.hysteresis).toFixed(1)}°C`;
   if (lastUpdate) $('updateAge').textContent = 'update: ' + new Date(lastUpdate).toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta'}) + ' WIB';
   return avg;
 }
@@ -121,15 +134,20 @@ function autoControl(avg){
   // Relay fisik milik ESP32; web hanya mirror status + tampilkan rekomendasi.
   if (CFG.mode !== 'auto' || fbConnected){
     if (CFG.mode==='auto' && fbConnected){
-      if (avg >= CFG.threshold && !sprinklerOn) $('sprinklerReason').textContent = `Rekomendasi: NYALA (avg ${avg.toFixed(1)} ≥ ${CFG.threshold.toFixed(1)}°C). ESP mengeksekusi.`;
+      if (curAutoSrc() === 'schedule'){
+        const act = schedActiveNow();
+        $('sprinklerReason').textContent = act
+          ? `Rekomendasi: NYALA (jadwal ${CFG.schedStart}, ${CFG.schedDur} mnt). ESP mengeksekusi.`
+          : `Standby jadwal — di luar window ${CFG.schedStart} +${CFG.schedDur} mnt.`;
+      } else if (avg >= CFG.threshold && !sprinklerOn) $('sprinklerReason').textContent = `Rekomendasi: NYALA (avg ${avg.toFixed(1)} ≥ ${CFG.threshold.toFixed(1)}°C). ESP mengeksekusi.`;
       else if (avg <= CFG.threshold - CFG.hysteresis && sprinklerOn) $('sprinklerReason').textContent = 'Rekomendasi: MATI.';
     }
     return;
   }
-  const d = SCS.decideSprinkler(avg, sprinklerOn, CFG);
-  if (d === 'on') setSprinkler(true, `avg ${avg.toFixed(1)}°C ≥ threshold ${CFG.threshold.toFixed(1)}°C`);
-  else if (d === 'off') setSprinkler(false, `avg ${avg.toFixed(1)}°C ≤ ${(CFG.threshold-CFG.hysteresis).toFixed(1)}°C (hysteresis)`);
-  else if (!sprinklerOn) $('sprinklerReason').textContent = `Standby — avg ${avg.toFixed(1)}°C < ${CFG.threshold.toFixed(1)}°C`;
+  const d = SCS.decideAuto(avg, sprinklerOn, CFG, schedActiveNow());
+  if (d === 'on') setSprinkler(true, curAutoSrc() === 'schedule' ? `jadwal ${CFG.schedStart}` : `avg ${avg.toFixed(1)}°C ≥ threshold ${CFG.threshold.toFixed(1)}°C`);
+  else if (d === 'off') setSprinkler(false, curAutoSrc() === 'schedule' ? 'jadwal selesai' : `avg ${avg.toFixed(1)}°C ≤ ${(CFG.threshold-CFG.hysteresis).toFixed(1)}°C (hysteresis)`);
+  else if (!sprinklerOn) $('sprinklerReason').textContent = curAutoSrc() === 'schedule' ? `Standby jadwal — menunggu window ${CFG.schedStart}.` : `Standby — avg ${avg.toFixed(1)}°C < ${CFG.threshold.toFixed(1)}°C`;
 }
 
 // ---------- DATA MASUK (dari Firebase via ESP32) ----------
@@ -150,9 +168,10 @@ function onNewData(arr){
 // ---------- CHART (canvas murni, offline-friendly) ----------
 function drawChart(){
   const c = $('chart'), ctx = c.getContext('2d');
+  const T = chartTheme();
   const W = c.width = c.clientWidth * 2, H = c.height = 440;
   ctx.clearRect(0,0,W,H);
-  if (history.length < 2){ ctx.fillStyle='#93a3c4'; ctx.font='28px sans-serif'; ctx.fillText('Menunggu data…', 30, 60); return; }
+  if (history.length < 2){ ctx.fillStyle=T.empty; ctx.font='28px sans-serif'; ctx.fillText('Menunggu data…', 30, 60); return; }
   const data = history.slice(-720);
   let mn = 99, mx = -99;
   data.forEach(d=>{ d.s.forEach(v=>{mn=Math.min(mn,v);mx=Math.max(mx,v);}); });
@@ -160,7 +179,7 @@ function drawChart(){
   const X = i => 60 + i/(data.length-1)*(W-80);
   const Y = v => 20 + (1-(v-mn)/(mx-mn))*(H-70);
   // grid + threshold
-  ctx.strokeStyle='#223152'; ctx.fillStyle='#93a3c4'; ctx.font='22px sans-serif';
+  ctx.strokeStyle=T.grid; ctx.fillStyle=T.txt; ctx.font='22px sans-serif';
   for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4, y=Y(v);
     ctx.beginPath(); ctx.moveTo(60,y); ctx.lineTo(W-20,y); ctx.stroke();
     ctx.fillText(v.toFixed(1)+'°', 4, y+7); }
@@ -234,17 +253,37 @@ function renderEvents(){
   });
 }
 
-// ---------- MODE + SOURCE ----------
+// ---------- MODE + SOURCE (eksklusif: threshold ATAU schedule) ----------
+function curAutoSrc(){
+  if (typeof SCS !== 'undefined' && SCS.autoSrcOf) return SCS.autoSrcOf(CFG);
+  return CFG.autoSrc || (CFG.schedOn ? 'schedule' : 'threshold');
+}
+function schedActiveNow(){
+  const s = SCS.hmToMin(CFG.schedStart);
+  if (!isFinite(s)) return false;
+  return SCS.scheduleActive(wibMinutes(), s, CFG.schedDur);
+}
 function syncButtons(){
   $('btnAuto').classList.toggle('active', CFG.mode==='auto');
   $('btnManual').classList.toggle('active', CFG.mode==='manual');
   $('btnSprayOn').disabled = $('btnSprayOff').disabled = CFG.mode!=='manual';
   const locked = CFG.mode !== 'auto';
-  ['inThreshold','inHyst','inMaxDur','inCooldown','rangeThreshold','inSchedOn','inSchedStart','inSchedDur','btnSaveCfg'].forEach((id)=>{ $(id).disabled = locked; });
+  const src = curAutoSrc();
+  const isThresh = src === 'threshold';
+  $('srcThreshold').checked = isThresh;
+  $('srcSchedule').checked = !isThresh;
+  $('srcThreshold').disabled = $('srcSchedule').disabled = locked;
+  ['inThreshold','inHyst','rangeThreshold'].forEach((id)=>{ $(id).disabled = locked || !isThresh; });
+  ['inMaxDur','inCooldown'].forEach((id)=>{ $(id).disabled = locked; });
+  ['inSchedStart','inSchedDur'].forEach((id)=>{ $(id).disabled = locked || isThresh; });
+  $('btnSaveCfg').disabled = locked;
   $('btnSaveCfg').textContent = locked ? '🔒 Terkunci saat mode manual' : '💾 Simpan Pengaturan';
   $('inThreshold').value = CFG.threshold; $('rangeThreshold').value = CFG.threshold;
   $('inHyst').value = CFG.hysteresis; $('inMaxDur').value = CFG.maxDuration; $('inCooldown').value = CFG.cooldown;
-  $('inSchedOn').checked = !!CFG.schedOn; $('inSchedStart').value = CFG.schedStart; $('inSchedDur').value = CFG.schedDur;
+  $('inSchedStart').value = CFG.schedStart; $('inSchedDur').value = CFG.schedDur;
+  // Conditional: hanya grup yang kepilih yang tampil (yang lain display:none biar clean).
+  $('threshGroup').style.display = isThresh ? '' : 'none';
+  $('schedGroup').style.display = isThresh ? 'none' : '';
   updateSchedHint();
 }
 $('btnAuto').onclick = ()=>{ CFG.mode='auto'; saveCfg(); syncButtons(); pushEvent('Mode → OTOMATIS'); fbPushControl(); };
@@ -253,7 +292,7 @@ $('btnSprayOn').onclick = ()=> setSprinkler(true, 'tombol manual');
 $('btnSprayOff').onclick = ()=> setSprinkler(false, 'tombol manual');
 function fbPushControl(){
   if (fbConnected && window.SCSFirebase){
-    SCSFirebase.pushControl({ mode: CFG.mode, threshold: CFG.threshold, hysteresis: CFG.hysteresis, maxDuration: CFG.maxDuration, cooldown: CFG.cooldown, schOn: CFG.schedOn ? 1 : 0, schStart: CFG.schedStart, schDur: CFG.schedDur });
+    SCSFirebase.pushControl({ mode: CFG.mode, autoSrc: curAutoSrc(), threshold: CFG.threshold, hysteresis: CFG.hysteresis, maxDuration: CFG.maxDuration, cooldown: CFG.cooldown, schOn: curAutoSrc() === 'schedule' ? 1 : 0, schStart: CFG.schedStart, schDur: CFG.schedDur });
   }
 }
 function wibMinutes(){
@@ -262,25 +301,31 @@ function wibMinutes(){
 }
 function updateSchedHint(){
   const el = $('schedHint'); if (!el) return;
-  if (!CFG.schedOn){ el.textContent = 'Jadwal nonaktif.'; return; }
+  if (curAutoSrc() === 'threshold'){ el.textContent = 'Jadwal nonaktif — mode suhu aktif.'; return; }
   const s = SCS.hmToMin(CFG.schedStart), now = wibMinutes();
   if (!isFinite(s)){ el.textContent = 'Format jam salah.'; return; }
-  if (SCS.scheduleActive(now, s, CFG.schedDur)) el.textContent = `Jadwal BERJALAN (tiap ${CFG.schedStart}, ${CFG.schedDur} mnt).`;
-  else el.textContent = `Jadwal aktif: ${now < s ? 'hari ini' : 'besok'} ${CFG.schedStart} WIB, selama ${CFG.schedDur} mnt.`;
+  if (SCS.scheduleActive(now, s, CFG.schedDur)) el.textContent = `Jadwal BERJALAN (tiap ${CFG.schedStart}, ${CFG.schedDur} mnt). Threshold nonaktif.`;
+  else el.textContent = `Jadwal aktif: ${now < s ? 'hari ini' : 'besok'} ${CFG.schedStart} WIB, selama ${CFG.schedDur} mnt. Threshold nonaktif.`;
 }
 let fbTries = 0;
+// fbStatus hanya tampil saat belum live (sim/error) biar tampilan clean.
+function setFbStatus(msg, kind){
+  const el = $('fbStatus'); if (!el) return;
+  el.textContent = msg || '';
+  el.style.display = (kind === 'live' || !msg) ? 'none' : '';
+}
 function fbConnect(){
   if (!window.SCSFirebase){ // module SDK belum termuat, coba lagi sebentar
     fbTries++;
-    $('fbStatus').textContent = fbTries > 12
+    setFbStatus(fbTries > 12
       ? 'Gagal memuat Firebase SDK. Buka via https://smartcow-de25f.web.app (bukan file lokal), matikan adblock untuk gstatic.com, lalu refresh.'
-      : 'Memuat Firebase SDK…';
+      : 'Memuat Firebase SDK…', 'sim');
     setTimeout(()=>{ if (!fbConnected) fbConnect(); }, 800);
     return;
   }
-  $('fbStatus').textContent = 'Menghubungkan ke Firebase…';
+  setFbStatus('Menghubungkan ke Firebase…', 'sim');
   SCSFirebase.connect({
-    onStatus: (msg, kind)=>{ $('fbStatus').textContent = msg; setConn(kind); },
+    onStatus: (msg, kind)=>{ setFbStatus(msg, kind); setConn(kind); },
     onTelemetry: (p)=>{
       fbConnected = true; setConn('live');
       if (p && Array.isArray(p.s)){
@@ -297,8 +342,8 @@ function fbConnect(){
       }
     },
     onSeedLogs: (rows)=>{ if (rows.length){ logs = SCS.pruneLogs(rows, 120); localStorage.setItem('scs_logs', JSON.stringify(logs)); renderLogs(); } }
-  }).then((ok)=>{ fbConnected = !!ok; if (ok) fbPushControl(); })
-    .catch((e)=>{ $('fbStatus').textContent = 'Firebase: ' + e.message; setConn('err'); });
+  }).then((ok)=>{ fbConnected = !!ok; if (ok){ setFbStatus('', 'live'); fbPushControl(); } })
+    .catch((e)=>{ setFbStatus('Firebase: ' + e.message, 'err'); setConn('err'); });
 }
 function setConn(kind){
   const b = $('connBadge');
@@ -310,20 +355,27 @@ function setConn(kind){
 // ---------- SETTINGS ----------
 $('rangeThreshold').oninput = e => { $('inThreshold').value = e.target.value; };
 $('inThreshold').oninput = e => { $('rangeThreshold').value = e.target.value; };
+$('srcThreshold').onchange = () => { CFG.autoSrc = 'threshold'; CFG.schedOn = false; saveCfg(); syncButtons(); renderSensors(); };
+$('srcSchedule').onchange = () => { CFG.autoSrc = 'schedule'; CFG.schedOn = true; saveCfg(); syncButtons(); renderSensors(); };
 $('btnSaveCfg').onclick = ()=>{
+  CFG.autoSrc = $('srcSchedule').checked ? 'schedule' : 'threshold';
+  CFG.schedOn = CFG.autoSrc === 'schedule';
   CFG.threshold = Math.min(40, Math.max(25, parseFloat($('inThreshold').value)||30));
   CFG.hysteresis = parseFloat($('inHyst').value)||1;
   CFG.maxDuration = parseInt($('inMaxDur').value)||120;
   CFG.cooldown = parseInt($('inCooldown').value)||60;
-  CFG.schedOn = $('inSchedOn').checked;
   CFG.schedStart = $('inSchedStart').value || '12:00';
   CFG.schedDur = Math.min(180, Math.max(1, parseInt($('inSchedDur').value)||10));
   saveCfg(); syncButtons(); renderSensors(); drawChart();
-  pushEvent(`Pengaturan disimpan: threshold ${CFG.threshold}°C, hyst ${CFG.hysteresis}°C`);
+  pushEvent(CFG.autoSrc === 'schedule'
+    ? `Pengaturan disimpan: mode JADWAL ${CFG.schedStart} +${CFG.schedDur} mnt`
+    : `Pengaturan disimpan: mode SUHU threshold ${CFG.threshold}°C, hyst ${CFG.hysteresis}°C`);
   fbPushControl();
 };
 
 // ---------- INIT (sumber tunggal: Firebase) ----------
+applyTheme(curTheme());
+$('themeBtn').onclick = ()=> applyTheme(curTheme() === 'light' ? 'dark' : 'light');
 buildGrid(6); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
 fbConnect();
 setInterval(updateSchedHint, 30000);

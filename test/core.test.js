@@ -65,6 +65,25 @@ test('durasi nol berarti jadwal mati', () => {
   assert.equal(SCS.scheduleActive(720, 720, 0), false);
 });
 
+test('mode eksklusif: threshold abaikan jadwal', () => {
+  const cfg = { threshold: 30.0, hysteresis: 1.0, autoSrc: 'threshold' };
+  assert.equal(SCS.decideAuto(31.5, false, cfg, true), 'on');
+  assert.equal(SCS.decideAuto(29.9, false, cfg, true), 'stay');
+  assert.equal(SCS.decideAuto(29.0, true, cfg, true), 'off');
+});
+
+test('mode eksklusif: schedule abaikan suhu', () => {
+  const cfg = { threshold: 30.0, hysteresis: 1.0, autoSrc: 'schedule' };
+  assert.equal(SCS.decideAuto(25.0, false, cfg, true), 'on');
+  assert.equal(SCS.decideAuto(35.0, true, cfg, false), 'off');
+  assert.equal(SCS.decideAuto(35.0, true, cfg, true), 'stay');
+});
+
+test('migrasi schedOn lama ke autoSrc', () => {
+  assert.equal(SCS.autoSrcOf({ schedOn: true }), 'schedule');
+  assert.equal(SCS.autoSrcOf({ schedOn: false }), 'threshold');
+  assert.equal(SCS.autoSrcOf({ autoSrc: 'schedule', schedOn: false }), 'schedule');
+});
 test('jumlah kartu tampil ikut sensor terdeteksi', () => {
   assert.equal(SCS.visibleCount(null), null);
   assert.equal(SCS.visibleCount(6), 6);
