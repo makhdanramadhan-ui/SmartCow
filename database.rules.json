@@ -1,0 +1,40 @@
+{
+  "rules": {
+    "devices": {
+      "$device": {
+        "telemetry": {
+          "latest": {
+            ".read": "auth != null",
+            ".write": "auth != null",
+            ".validate": "newData.hasChildren(['t1', 't2', 't3', 't4', 't5', 't6', 'avg', 'ssr', 'n', 'ts']) && newData.child('avg').isNumber() && newData.child('avg').val() >= -55 && newData.child('avg').val() <= 125"
+          },
+          "log": {
+            ".read": "auth != null",
+            ".indexOn": ["ts"],
+            "$pushId": {
+              ".write": "auth != null",
+              ".validate": "newData.hasChildren(['avg', 'ts']) && newData.child('avg').isNumber()"
+            }
+          }
+        },
+        "control": {
+          ".read": "auth != null",
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['mode']) && (newData.child('mode').val() == 'auto' || newData.child('mode').val() == 'manual')"
+        },
+        "events": {
+          ".read": "auth != null",
+          ".indexOn": ["ts"],
+          "$pushId": {
+            ".write": "auth != null",
+            ".validate": "newData.hasChildren(['type', 'ts']) && newData.child('type').isString()"
+          }
+        },
+        "status": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    }
+  }
+}
