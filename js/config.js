@@ -1,5 +1,20 @@
 // Konfigurasi default — bisa diubah dari UI, tersimpan di localStorage.
 // Sumber data tunggal: Firebase (ESP32 menulis, web membaca + kirim perintah).
+function todayWIB() {
+  try {
+    if (window.SCS && SCS.wibDateStr) return SCS.wibDateStr();
+  } catch {}
+  return new Date().toISOString().slice(0, 10);
+}
+// Template awal: contoh 3× sehari (09:00, 14:00, 18:00 WIB).
+function defaultSchedules() {
+  const t = todayWIB();
+  return [
+    { date: t, start: '09:00', dur: 10 },
+    { date: t, start: '14:00', dur: 10 },
+    { date: t, start: '18:00', dur: 10 },
+  ];
+}
 const DEFAULT_CFG = {
   threshold: 30.0,
   hysteresis: 1.0,
@@ -8,21 +23,21 @@ const DEFAULT_CFG = {
   mode: 'auto',       // auto | manual
   autoSrc: 'threshold', // threshold | schedule (eksklusif, pilih salah satu)
   schedOn: false,       // turunan dari autoSrc, disimpan untuk kompatibel firmware lama
-  // Mode jadwal: daftar semprot per hari, tiap slot {start:'HH:MM' WIB, dur:menit}.
-  // Durasi = lama nyala slot itu. Tanpa cooldown. Maks 6 slot.
-  schedules: [
-    { start: '09:00', dur: 10 },
-    { start: '14:00', dur: 10 },
-    { start: '18:00', dur: 10 },
-  ],
+  // Mode jadwal: daftar semprot bertanggal, tiap slot {date:'YYYY-MM-DD', start:'HH:MM' WIB, dur:menit}.
+  // Durasi = lama nyala slot itu. Tanpa cooldown. Maks 6 slot. Yang kedaluwarsa auto-hapus.
+  schedules: defaultSchedules(),
 };
 let CFG = { ...DEFAULT_CFG, ...(JSON.parse(localStorage.getItem('scs_cfg') || '{}')) };
-// Migrasi: dulu pakai checkbox schedOn + 1 jadwal, sekarang radio autoSrc + daftar slot.
+// Migrasi: format lama (schedOn/schedStart/schedDur atau slot tanpa tanggal) -> slot bertanggal hari ini.
 if (!CFG.autoSrc) CFG.autoSrc = CFG.schedOn ? 'schedule' : 'threshold';
 CFG.schedOn = CFG.autoSrc === 'schedule';
-if (!Array.isArray(CFG.schedules) || !CFG.schedules.length) {
-  if (CFG.schedStart && CFG.schedDur) CFG.schedules = [{ start: CFG.schedStart, dur: CFG.schedDur }];
-  else CFG.schedules = [...DEFAULT_CFG.schedules];
+try {
+  const t = todayWIB(), now = Date.now();
+  let slots = SCS.schedulesOf(CFG, t);
+  slots = SCS.prunePastSlots(slots, now); // autoreset: buang yang sudah lewat
+  CFG.schedules = slots.length ? slots : defaultSchedules();
+} catch {
+  if (!Array.isArray(CFG.schedules) || !CFG.schedules.length) CFG.schedules = defaultSchedules();
 }
 delete CFG.schedStart; delete CFG.schedDur;
 

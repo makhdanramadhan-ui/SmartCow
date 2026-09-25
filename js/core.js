@@ -63,38 +63,70 @@
     if (start + dur <= 1440) return cur >= start && cur < start + dur;
     return cur >= start || cur < (start + dur) % 1440;
   }
-  // Daftar slot jadwal ternormalisasi: [{start:'HH:MM', dur:menit}].
-  // Migrasi: format lama schedStart/schedDur tunggal -> 1 slot.
-  function schedulesOf(cfg) {
-    if (cfg && Array.isArray(cfg.schedules)) {
-      return cfg.schedules
-        .filter((s) => s && typeof s.start === 'string' && isFinite(hmToMin(s.start)) && +s.dur > 0)
-        .slice(0, 6)
-        .map((s) => ({ start: s.start, dur: Math.min(180, Math.max(1, Math.round(+s.dur))) }));
-    }
-    if (cfg && typeof cfg.schedStart === 'string' && isFinite(hmToMin(cfg.schedStart)) && +cfg.schedDur > 0)
-      return [{ start: cfg.schedStart, dur: Math.min(180, Math.max(1, Math.round(+cfg.schedDur))) }];
-    return [];
+  // Daftar slot jadwal ternormalisasi: [{date:'YYYY-MM-DD', start:'HH:MM', dur:menit}].
+  // Migrasi: format lama {start,dur} tanpa tanggal -> diberi tanggal hari ini (param todayStr).
+  // Slot rusak / tanggal tak valid dibuang. Maks 6, urut tanggal+jam.
+  function schedulesOf(cfg, todayStr) {
+    let raw = [];
+    if (cfg && Array.isArray(cfg.schedules)) raw = cfg.schedules;
+    else if (cfg && typeof cfg.schedStart === 'string') raw = [{ start: cfg.schedStart, dur: cfg.schedDur }];
+    const out = [];
+    raw.forEach((s) => {
+      if (!s || typeof s.start !== 'string' || !isFinite(hmToMin(s.start))) return;
+      let date = s.date || '';
+      if (!date) { if (!todayStr) return; date = todayStr; } // slot lama tanpa tanggal -> hari ini
+      else if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;    // tanggal rusak -> buang
+      const dur = Math.min(180, Math.max(1, Math.round(+s.dur || 0)));
+      if (!(dur > 0)) return;
+      if (!out.some((o) => o.date === date && o.start === s.start)) out.push({ date, start: s.start, dur });
+    });
+    out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : hmToMin(a.start) - hmToMin(b.start)));
+    return out.slice(0, 6);
+  }
+  // 'YYYY-MM-DD' WIB hari ini (Asia/Jakarta, UTC+7 tetap).
+  function wibDateStr(d) {
+    d = d || new Date();
+    const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+    const g = (t) => p.find((x) => x.type === t).value;
+    return `${g('year')}-${g('month')}-${g('day')}`;
+  }
+  // Epoch-ms untuk tanggal+jam WIB. WIB = UTC+7 tanpa DST.
+  function wibDateTimeMs(dateStr, timeStr) {
+    const D = (dateStr || '').split('-').map(Number);
+    const T = (timeStr || '').split(':').map(Number);
+    if (D.length < 3 || T.length < 2 || D.some((x) => !isFinite(x)) || T.some((x) => !isFinite(x))) return NaN;
+    return Date.UTC(D[0], D[1] - 1, D[2], T[0] - 7, T[1]);
+  }
+  // Status slot thd nowMs: 'active' | 'future' | 'past'.
+  function slotState(s, nowMs) {
+    const t0 = wibDateTimeMs(s.date, s.start);
+    if (!isFinite(t0)) return 'past';
+    if (nowMs < t0) return 'future';
+    if (nowMs < t0 + s.dur * 60000) return 'active';
+    return 'past';
   }
   // true bila ada SATU slot pun yang sedang berjalan. Durasi tiap slot = lama nyala (tanpa cooldown).
-  function anyScheduleActive(cur, slots) {
-    return (slots || []).some((s) => scheduleActive(cur, hmToMin(s.start), s.dur));
+  function anyScheduleActive(nowMs, slots) {
+    return (slots || []).some((s) => slotState(s, nowMs) === 'active');
   }
-  // Slot berikutnya yang akan jalan (untuk hint). null bila tidak ada slot valid.
-  function nextSchedule(cur, slots) {
+  // Slot berikutnya (yang aktif / paling dekat di depan). null bila tidak ada.
+  function nextSchedule(nowMs, slots) {
     let best = null;
     (slots || []).forEach((s) => {
-      const st = hmToMin(s.start);
-      if (!isFinite(st) || !(s.dur > 0)) return;
-      const delta = (st - cur + 1440) % 1440;
-      if (!best || delta < best.delta) best = { start: s.start, dur: s.dur, delta };
+      const t0 = wibDateTimeMs(s.date, s.start);
+      if (!isFinite(t0) || slotState(s, nowMs) === 'past') return;
+      if (!best || t0 < best.t0) best = { date: s.date, start: s.start, dur: s.dur, t0, active: nowMs >= t0 };
     });
     return best;
+  }
+  // Buang slot yang window-nya sudah lewat seluruhnya (autoreset harian).
+  function prunePastSlots(slots, nowMs) {
+    return (slots || []).filter((s) => slotState(s, nowMs) !== 'past');
   }
   function logToCsv(r, threshold) {
     const w = new Date(r.t).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
     const st = r.avg >= threshold ? 'PANAS' : 'NORMAL';
     return `"${w}",${r.s.join(',')},${r.avg},${st},${r.spray ? 'ON' : 'OFF'}`;
   }
-  return { decideSprinkler, decideAuto, autoSrcOf, classify, avgOf, pruneLogs, logToCsv, hmToMin, scheduleActive, schedulesOf, anyScheduleActive, nextSchedule, sensorTitle, visibleCount };
+  return { decideSprinkler, decideAuto, autoSrcOf, classify, avgOf, pruneLogs, logToCsv, hmToMin, scheduleActive, schedulesOf, anyScheduleActive, nextSchedule, prunePastSlots, slotState, wibDateStr, wibDateTimeMs, sensorTitle, visibleCount };
 });
