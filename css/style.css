@@ -85,6 +85,18 @@ body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-grad
 .range-row input{width:100%;accent-color:var(--blue)}
 .theme-btn{font-size:20px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 12px;cursor:pointer;color:var(--txt)}
 .theme-btn:hover{border-color:var(--blue)}
+.menu-btn{font-size:22px;background:var(--card);border:1px solid var(--line);border-radius:14px;width:52px;height:52px;display:grid;place-items:center;cursor:pointer;color:var(--txt);flex:none}
+.menu-btn:hover{border-color:var(--blue)}
+.side-overlay{position:fixed;inset:0;background:#0009;z-index:70;backdrop-filter:blur(2px)}
+.sidebar{position:fixed;top:0;left:0;bottom:0;width:264px;z-index:71;background:var(--card);border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:8px;transform:translateX(-105%);transition:transform .25s ease;box-shadow:20px 0 60px #0008}
+.sidebar.open{transform:none}
+.side-head{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:16px;margin-bottom:8px}
+.side-head button{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:9px;width:30px;height:30px;cursor:pointer}
+.side-head button:hover{border-color:var(--blue)}
+.side-link{display:flex;gap:10px;align-items:center;background:transparent;border:1px solid transparent;color:var(--txt);border-radius:12px;padding:12px 14px;font-size:14px;font-weight:700;cursor:pointer;text-align:left}
+.side-link:hover{border-color:var(--line)}
+.side-link.active{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 4px 16px #3b82f655}
+[data-theme="light"] .sidebar{background:#fff}
 .sched-box{margin-top:12px;background:#0b142c;border:1px dashed var(--line);border-radius:12px;padding:10px}
 .sched-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-bottom:8px}
 #schedList{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}

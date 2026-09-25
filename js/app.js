@@ -674,10 +674,39 @@ $('btnAddSched').onclick = ()=>{
   saveCfg(); syncButtons();
 };
 
+// ---------- SIDEBAR + HALAMAN (dashboard / log / event) ----------
+function openSide(){
+  $('sidebar').classList.add('open');
+  $('sidebar').setAttribute('aria-hidden', 'false');
+  $('sideOverlay').hidden = false;
+}
+function closeSide(){
+  const sb = $('sidebar'); if (!sb) return;
+  sb.classList.remove('open');
+  sb.setAttribute('aria-hidden', 'true');
+  $('sideOverlay').hidden = true;
+}
+function showPage(p){
+  if (p !== 'log' && p !== 'event') p = 'dash';
+  document.querySelectorAll('main.container > section').forEach((s) => {
+    s.style.display = (!s.dataset.page || s.dataset.page === p) ? '' : 'none';
+  });
+  document.querySelectorAll('.side-link').forEach((b) => b.classList.toggle('active', b.dataset.page === p));
+  try { localStorage.setItem('scs_page', p); } catch {}
+  closeSide();
+  window.scrollTo(0, 0);
+  if (p === 'dash' && typeof drawChart === 'function') drawChart(); // canvas butuh redraw pas tampil lagi
+}
 // ---------- INIT (sumber tunggal: Firebase) ----------
 applyTheme(curTheme());
 $('themeBtn').onclick = ()=> applyTheme(curTheme() === 'light' ? 'dark' : 'light');
+$('menuBtn').onclick = openSide;
+$('sideClose').onclick = closeSide;
+$('sideOverlay').onclick = closeSide;
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSide(); });
+document.querySelectorAll('.side-link').forEach((b) => { b.onclick = () => showPage(b.dataset.page); });
 buildGrid(6); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
+try { showPage(localStorage.getItem('scs_page') || 'dash'); } catch { showPage('dash'); }
 fbConnect();
 setInterval(() => { updateSchedHint(); updateModeInfo(); }, 30000);
 // Auto-prune berkala: slot kedaluwarsa hilang sendiri walau halaman dibiarkan terbuka.
