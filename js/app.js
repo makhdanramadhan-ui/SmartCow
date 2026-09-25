@@ -265,8 +265,6 @@ function schedActiveNow(){
   return SCS.anyScheduleActive(Date.now(), schedSlots());
 }
 function pad2(n){ return String(n).padStart(2, '0'); }
-function splitISO(dateStr){ const p = (dateStr || '').split('-'); return { y: p[0] || '', m: p[1] || '', d: p[2] || '' }; }
-function splitHM(hm){ const p = (hm || '').split(':'); return { h: p[0] || '', mi: p[1] || '' }; }
 // ---------- EDITOR DAFTAR JADWAL (maks 6 slot bertanggal) ----------
 // Aturan: tanggal bebas (min hari ini). Khusus hari ini, jam min = sekarang+1 mnt.
 function renderSchedList(){
@@ -278,26 +276,30 @@ function renderSchedList(){
     box.innerHTML = '<div class="hint" style="padding:4px 2px">Belum ada jadwal — klik ＋ Tambah.</div>';
   }
   slots.forEach((s, i) => {
-    const dd = splitISO(s.date), tt = splitHM(s.start);
+    const f = SCS.formatIDDate(s.date);
     const row = document.createElement('div');
     row.className = 'sched-row';
     row.innerHTML = `<span class="sched-num">${i + 1}</span>
       <div class="sched-groups">
-        <div class="sched-group"><span>Tanggal</span><div class="sched-inline">
-          <input type="number" data-k="dd" value="${+dd.d}" min="1" max="31" title="Tanggal" ${locked ? 'disabled' : ''} />/<input type="number" data-k="mm" value="${+dd.m}" min="1" max="12" title="Bulan" ${locked ? 'disabled' : ''} />/<input type="number" data-k="yyyy" value="${dd.y}" min="2026" max="2030" title="Tahun" ${locked ? 'disabled' : ''} />
-        </div></div>
-        <div class="sched-group"><span>Jam (24)</span><div class="sched-inline">
-          <input type="number" data-k="hh" value="${tt.h}" min="0" max="23" title="Jam 0-23" ${locked ? 'disabled' : ''} />:<input type="number" data-k="mi" value="${tt.mi}" min="0" max="59" title="Menit" ${locked ? 'disabled' : ''} />
-        </div></div>
+        <button class="pick-btn" data-pick="date" data-i="${i}" data-pop-anchor ${locked ? 'disabled' : ''} title="Pilih tanggal"><span class="pick-ico">📅</span><span>${f || s.date}</span></button>
+        <button class="pick-btn" data-pick="time" data-i="${i}" data-pop-anchor ${locked ? 'disabled' : ''} title="Pilih jam (24 jam)"><span class="pick-ico">🕐</span><span>${s.start}</span></button>
         <div class="sched-group"><span>Nyala</span><div class="sched-inline">
-          <input type="number" data-k="dur" step="1" min="1" max="180" value="${s.dur}" title="Lama nyala (menit)" ${locked ? 'disabled' : ''} /><i>mnt</i>
+          <input type="number" data-dur="${i}" step="1" min="1" max="180" value="${s.dur}" title="Lama nyala (menit)" ${locked ? 'disabled' : ''} /><i>mnt</i>
         </div></div>
       </div>
       <button class="btn red small sched-del" data-del="${i}" title="Hapus jadwal ini" ${locked ? 'disabled' : ''}>✕</button>`;
     box.appendChild(row);
   });
-  box.querySelectorAll('input').forEach((el) => {
-    el.onchange = () => { CFG.schedules = readSchedList(); saveCfg(); syncButtons(); };
+  box.querySelectorAll('[data-pick]').forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); openSlotPicker(b); };
+  });
+  box.querySelectorAll('[data-dur]').forEach((el) => {
+    el.onchange = () => {
+      const arr = [...schedSlots()];
+      const v = Math.min(180, Math.max(1, parseInt(el.value) || 0));
+      if (v > 0 && arr[+el.dataset.dur]){ arr[+el.dataset.dur].dur = v; CFG.schedules = arr; saveCfg(); }
+      syncButtons();
+    };
   });
   box.querySelectorAll('[data-del]').forEach((btn) => {
     btn.onclick = () => {
@@ -312,30 +314,186 @@ function renderSchedList(){
   const add = $('btnAddSched'); if (add) add.disabled = CFG.mode !== 'auto' || schedSlots().length >= 6;
 }
 function readSchedList(keepPast){
-  const box = $('schedList'); if (!box) return schedSlots();
-  const now = Date.now(), today = SCS.wibDateStr();
-  const rows = [...box.querySelectorAll('.sched-row')];
+  // Nilai jadwal hidup di CFG.schedules (popup menulis langsung ke sana).
+  // Fungsi ini normalisasi: dedupe + buang yang lewat + urut + batasi 6. Boleh kosong.
+  const now = Date.now();
   const out = [];
-  rows.forEach((row) => {
-    const g = (k) => (((row.querySelector('[data-k="' + k + '"]') || {}).value) || '').trim();
-    const dd = Math.round(+g('dd') || 0), mm = Math.round(+g('mm') || 0), yy = Math.round(+g('yyyy') || 0);
-    const hh = Math.round(+g('hh') || 0), mi = Math.round(+g('mi') || 0);
-    const du = Math.min(180, Math.max(1, parseInt(g('dur')) || 10));
-    if (!(yy >= 2026 && yy <= 2030 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31)) return;
-    if (!(hh >= 0 && hh <= 23 && mi >= 0 && mi <= 59)) return;
-    const date = yy + '-' + pad2(mm) + '-' + pad2(dd);
-    if (!SCS.formatIDDate(date)) return; // tanggal tak nyata (mis. 31 Feb) -> buang
-    if (date < today) return; // masa lalu -> buang
-    const st = pad2(hh) + ':' + pad2(mi);
-    if (out.some((s) => s.date === date && s.start === st)) return;
-    const slot = { date, start: st, dur: du };
-    if (!keepPast && SCS.slotState(slot, now) === 'past') return; // yang sudah lewat dibuang
-    out.push(slot);
+  schedSlots().forEach((s) => {
+    if (out.some((o) => o.date === s.date && o.start === s.start)) return;
+    if (!keepPast && SCS.slotState(s, now) === 'past') return; // yang sudah lewat dibuang
+    out.push(s);
   });
-  out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : SCS.hmToMin(a.start) - SCS.hmToMin(b.start)));
-  return out.slice(0, 6); // boleh kosong
+  return out.slice(0, 6);
+}
+// ---------- POPUP PICKER CUSTOM (kalender + jam 24, ikut tema) ----------
+let popEl = null;
+function closePicker(){
+  if (!popEl) return;
+  popEl.remove(); popEl = null;
+  document.removeEventListener('pointerdown', popOutside, true);
+  window.removeEventListener('scroll', closePicker, true);
+  window.removeEventListener('resize', closePicker);
+  document.removeEventListener('keydown', popEsc);
+}
+function popOutside(e){
+  if (!popEl) return;
+  if (e.target.closest && e.target.closest('[data-pop-anchor]')) return; // biar toggle anchor yang urus
+  if (!popEl.contains(e.target)) closePicker();
+}
+function popEsc(e){ if (e.key === 'Escape') closePicker(); }
+function openPop(anchor, key, html){
+  if (popEl && popEl.dataset.for === key){ closePicker(); return null; } // toggle
+  closePicker();
+  popEl = document.createElement('div');
+  popEl.className = 'picker-pop';
+  popEl.dataset.for = key;
+  popEl.innerHTML = html;
+  document.body.appendChild(popEl);
+  popEl.style.visibility = 'hidden';
+  const r = anchor.getBoundingClientRect();
+  const pw = popEl.offsetWidth, ph = popEl.offsetHeight;
+  const x = Math.min(r.left, window.innerWidth - pw - 12);
+  let y = r.bottom + 6;
+  if (y + ph > window.innerHeight - 12) y = Math.max(12, r.top - ph - 6);
+  popEl.style.left = Math.max(12, x) + 'px';
+  popEl.style.top = Math.max(0, y) + 'px';
+  popEl.style.visibility = '';
+  document.addEventListener('pointerdown', popOutside, true);
+  window.addEventListener('scroll', closePicker, true);
+  window.addEventListener('resize', closePicker);
+  document.addEventListener('keydown', popEsc);
+  return popEl;
+}
+const ID_MON = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+const ID_DOW = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+function openSlotPicker(btn){
+  const i = +btn.dataset.i, type = btn.dataset.pick;
+  const slots = [...schedSlots()];
+  const s = slots[i];
+  if (!s) return;
+  if (type === 'date') openDatePop(btn, i, s);
+  else openTimePop(btn, i, s);
+}
+function commitSlots(slots, msg){
+  CFG.schedules = slots.slice(0, 6);
+  saveCfg(); syncButtons(); updateSchedHint();
+  if (msg) pushEvent(msg);
+  fbPushControl();
+}
+// --- Kalender popup: min hari ini, maks 31 Des 2030 ---
+function openDatePop(btn, i, s){
+  const today = SCS.wibDateStr();
+  const cur = /^\d{4}-\d{2}-\d{2}$/.test(s.date) ? s.date : today;
+  let vy = +cur.slice(0, 4), vm = +cur.slice(5, 7);
+  const el = openPop(btn, i + '-date', '<div class="pk-cal"></div>');
+  if (!el) return;
+  const box = el.querySelector('.pk-cal');
+  function draw(){
+    const first = new Date(Date.UTC(vy, vm - 1, 1));
+    const lead = (first.getUTCDay() + 6) % 7; // Senin=0
+    const dim = new Date(Date.UTC(vy, vm, 0)).getUTCDate();
+    let h = `<div class="pk-head"><button data-nav="-1"${vy === 2026 && vm === 1 ? ' disabled' : ''}>‹</button><b>${ID_MON[vm - 1]} ${vy}</b><button data-nav="1"${vy === 2030 && vm === 12 ? ' disabled' : ''}>›</button></div>`;
+    h += '<div class="pk-dow">' + ID_DOW.map((d) => `<span>${d}</span>`).join('') + '</div><div class="pk-grid">';
+    for (let k = 0; k < lead; k++) h += '<span></span>';
+    for (let d = 1; d <= dim; d++){
+      const iso = `${vy}-${pad2(vm)}-${pad2(d)}`;
+      const dis = iso < today || iso > '2030-12-31';
+      h += `<button data-day="${iso}"${dis ? ' disabled' : ''} class="${iso === s.date ? 'sel' : ''}">${d}</button>`;
+    }
+    h += '</div><div class="pk-foot"><button data-today>Hari ini</button><button data-close>Tutup</button></div>';
+    box.innerHTML = h;
+    box.querySelectorAll('[data-nav]').forEach((b) => {
+      b.onclick = () => {
+        vm += +b.dataset.nav;
+        if (vm < 1){ vm = 12; vy--; } if (vm > 12){ vm = 1; vy++; }
+        if (vy < 2026 || (vy === 2026 && vm < 1)){ vy = 2026; vm = 1; }
+        if (vy > 2030 || (vy === 2030 && vm > 12)){ vy = 2030; vm = 12; }
+        draw();
+      };
+    });
+    box.querySelectorAll('[data-day]').forEach((b) => {
+      b.onclick = () => {
+        const arr = [...schedSlots()];
+        if (!arr[i]){ closePicker(); return; }
+        arr[i] = { ...arr[i], date: b.dataset.day };
+        commitSlots(arr);
+        closePicker();
+      };
+    });
+    box.querySelector('[data-today]').onclick = () => {
+      const arr = [...schedSlots()];
+      if (!arr[i]){ closePicker(); return; }
+      arr[i] = { ...arr[i], date: SCS.wibDateStr() };
+      commitSlots(arr);
+      closePicker();
+    };
+    box.querySelector('[data-close]').onclick = closePicker;
+  }
+  draw();
+}
+// --- Jam popup: 24 jam (00-23) + menit, arrow atas-bawah (tahan = repeat) ---
+function openTimePop(btn, i, s){
+  const today = SCS.wibDateStr();
+  // Batas bawah khusus slot hari ini: sekarang+1 mnt (slot besok bebas 00:00).
+  let minH = -1, minM = 0;
+  if (s.date <= today){
+    const t = new Date(Date.now() + 60000);
+    const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(t);
+    const g = (x) => p.find((y) => y.type === x).value;
+    minH = (+g('hour')) % 24; minM = +g('minute');
+  }
+  const parts = (s.start || '09:00').split(':');
+  let hh = Math.min(23, Math.max(0, parseInt(parts[0]) || 0));
+  let mi = Math.min(59, Math.max(0, parseInt(parts[1]) || 0));
+  if (hh < minH || (hh === minH && mi < minM)){ hh = minH; mi = minM; }
+  const el = openPop(btn, i + '-time', `<div class="pk-time">
+      <div class="pk-col"><button data-s="h" data-d="1">▲</button><b data-v="h">${pad2(hh)}</b><button data-s="h" data-d="-1">▼</button><span>Jam</span></div>
+      <div class="pk-sep">:</div>
+      <div class="pk-col"><button data-s="m" data-d="1">▲</button><b data-v="m">${pad2(mi)}</b><button data-s="m" data-d="-1">▼</button><span>Menit</span></div>
+    </div>
+    <div class="pk-foot"><span class="hint">24 jam • WIB</span><span><button data-close>Batal</button> <button data-ok class="btn blue small">OK</button></span></div>`);
+  if (!el) return;
+  const vH = el.querySelector('[data-v="h"]'), vM = el.querySelector('[data-v="m"]');
+  function paint(){ vH.textContent = pad2(hh); vM.textContent = pad2(mi); }
+  function step(which, d){
+    if (which === 'h'){
+      hh = (hh + d + 24) % 24;
+      if (hh < minH) hh = d > 0 ? minH : 23;
+      if (hh === minH && mi < minM) mi = minM;
+    } else {
+      mi += d;
+      if (mi > 59){ mi = 0; step('h', 1); return; }
+      if (mi < 0){ mi = 59; step('h', -1); return; }
+      if (hh === minH && mi < minM) mi = d > 0 ? minM : 59;
+      if (hh === minH && mi < minM && d < 0) hh = 23;
+    }
+    paint();
+  }
+  let repT = null, repI = null;
+  function stopRep(){ clearTimeout(repT); clearInterval(repI); repT = repI = null; }
+  el.querySelectorAll('[data-s]').forEach((b) => {
+    const w = b.dataset.s, d = +b.dataset.d;
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      step(w, d);
+      stopRep();
+      repT = setTimeout(() => { repI = setInterval(() => step(w, d), 70); }, 380);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => b.addEventListener(ev, stopRep));
+    b.addEventListener('click', stopRep);
+  });
+  el.querySelector('[data-close]').onclick = () => { stopRep(); closePicker(); };
+  el.querySelector('[data-ok]').onclick = () => {
+    stopRep();
+    const arr = [...schedSlots()];
+    if (!arr[i]){ closePicker(); return; }
+    arr[i] = { ...arr[i], start: pad2(hh) + ':' + pad2(mi) };
+    commitSlots(arr);
+    closePicker();
+  };
 }
 function syncButtons(){
+  if (typeof closePicker === 'function') closePicker(); // anchor lama bisa hilang pas re-render
   $('btnAuto').classList.toggle('active', CFG.mode==='auto');
   $('btnManual').classList.toggle('active', CFG.mode==='manual');
   $('btnSprayOn').disabled = $('btnSprayOff').disabled = CFG.mode!=='manual';
