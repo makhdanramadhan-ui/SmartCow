@@ -55,6 +55,13 @@ int devCount = 0;
 char ctlMode[8] = "auto";
 char ctlManual[8] = "off";
 char ctlAutoSrc[10] = "threshold"; // threshold | schedule (eksklusif)
+// Mode jadwal: daftar slot {jam mulai WIB, lama nyala menit}. Maks 6.
+// Durasi = lama nyala slot itu, tanpa cooldown/proteksi.
+#define MAX_SLOTS 6
+int ctlSlotN = 0;
+char ctlSlotStart[MAX_SLOTS][8] = {"09:00", "14:00", "18:00", "", "", ""};
+int ctlSlotDur[MAX_SLOTS] = {10, 10, 10, 0, 0, 0};
+// Legacy 1-jadwal (fallback bila web lama belum kirim schN).
 char ctlSchStart[8] = "12:00";
 int ctlSchDur = 10;
 bool ctlSchOn = false;
@@ -164,17 +171,46 @@ float avgNow() {
   return lastAvg;
 }
 
-// true bila jadwal harian sedang dalam window (jam WIB dari NTP).
-bool schedActiveNow() {
-  if (!ctlSchOn) return false;
-  struct tm ti;
-  if (!getLocalTime(&ti)) return false;
-  int h, m;
-  if (sscanf(ctlSchStart, "%d:%d", &h, &m) != 2) return false;
-  int start = h * 60 + m, cur = ti.tm_hour * 60 + ti.tm_min, dur = ctlSchDur;
+// true bila `cur` (menit) di dalam window [start, start+dur). Tahan bungkus tengah malam.
+bool inWindow(int cur, int start, int dur) {
   if (dur <= 0) return false;
   if (start + dur <= 1440) return cur >= start && cur < start + dur;
   return cur >= start || cur < (start + dur) % 1440;
+}
+
+// true bila SALAH SATU slot jadwal sedang berjalan (jam WIB dari NTP).
+// Tanpa ctlSchOn: jumlah slot (ctlSlotN) yang menentukan. Fallback legacy 1-jadwal.
+bool schedActiveNow() {
+  struct tm ti;
+  if (!getLocalTime(&ti)) return false;
+  int cur = ti.tm_hour * 60 + ti.tm_min;
+  if (ctlSlotN > 0) {
+    for (int i = 0; i < ctlSlotN && i < MAX_SLOTS; i++) {
+      int h, m;
+      if (sscanf(ctlSlotStart[i], "%d:%d", &h, &m) != 2) continue;
+      if (inWindow(cur, h * 60 + m, ctlSlotDur[i])) return true;
+    }
+    return false;
+  }
+  if (!ctlSchOn) return false;
+  int h, m;
+  if (sscanf(ctlSchStart, "%d:%d", &h, &m) != 2) return false;
+  return inWindow(cur, h * 60 + m, ctlSchDur);
+}
+
+// Jam mulai slot yang sedang berjalan (untuk log). "" bila tidak ada.
+void activeSlotStart(char *out, size_t n) {
+  struct tm ti;
+  if (!getLocalTime(&ti)) { out[0] = 0; return; }
+  int cur = ti.tm_hour * 60 + ti.tm_min;
+  for (int i = 0; i < ctlSlotN && i < MAX_SLOTS; i++) {
+    int h, m;
+    if (sscanf(ctlSlotStart[i], "%d:%d", &h, &m) != 2) continue;
+    if (inWindow(cur, h * 60 + m, ctlSlotDur[i])) {
+      strncpy(out, ctlSlotStart[i], n); out[n - 1] = 0; return;
+    }
+  }
+  out[0] = 0;
 }
 
 void applyLogic(float avg) {
@@ -183,13 +219,17 @@ void applyLogic(float avg) {
   if (autoMode) {
     bool isSchedule = strcmp(ctlAutoSrc, "schedule") == 0;
     if (isSchedule) {
-      // EKSKLUSIF jadwal: abaikan threshold, hanya window jadwal.
+      // EKSKLUSIF jadwal: ikuti slot persis apa adanya.
+      // Tiap slot: ON di jam mulai selama lama-nyala slot itu, OFF di luar itu.
+      // Tanpa cooldown & tanpa batas durasi maks (durasi = lama nyala slot).
       bool sch = schedActiveNow();
-      if (sch && !ssrOn) setRelay(true, "jadwal_on", "jadwal " + String(ctlSchStart), avg);
-      else if (!sch && ssrOn) setRelay(false, "jadwal_off", "jadwal selesai", avg);
+      if (sch && !ssrOn) {
+        char sb[8]; activeSlotStart(sb, sizeof(sb));
+        setRelay(true, "jadwal_on", "jadwal " + String(sb), avg);
+      } else if (!sch && ssrOn) {
+        setRelay(false, "jadwal_off", "jadwal selesai", avg);
+      }
       schedWas = sch;
-      if (ssrOn && sprayStart && (now - sprayStart) / 1000UL >= (unsigned long)ctlMaxDur)
-        setRelay(false, "protect_off", "durasi maks", avg);
     } else {
       // EKSKLUSIF threshold: abaikan jadwal.
       if (!ssrOn && avg >= ctlThreshold) {
@@ -239,10 +279,11 @@ void pollControl() {
   String js = fbGet("control");
   if (js.length() == 0) return;
   if (js == "null") { // belum ada, tulis default dari firmware
-    char buf[300];
+    char buf[400];
     snprintf(buf, sizeof(buf),
       "{\"mode\":\"auto\",\"autoSrc\":\"threshold\",\"manualSsr\":\"off\",\"threshold\":%.1f,\"hysteresis\":%.1f,"
-      "\"maxDuration\":%d,\"cooldown\":%d,\"schOn\":0,\"schStart\":\"12:00\",\"schDur\":10,"
+      "\"maxDuration\":%d,\"cooldown\":%d,\"schN\":0,\"schOn\":0,"
+      "\"sch1Start\":\"09:00\",\"sch1Dur\":10,\"sch2Start\":\"14:00\",\"sch2Dur\":10,\"sch3Start\":\"18:00\",\"sch3Dur\":10,"
       "\"updatedBy\":\"device\"}",
       ctlThreshold, ctlHyst, ctlMaxDur, ctlCooldown);
     fbPut("control", String(buf));
@@ -260,6 +301,21 @@ void pollControl() {
   // Migrasi: kalau web lama belum kirim autoSrc, turunkan dari schOn.
   if (strlen(ctlAutoSrc) == 0) strncpy(ctlAutoSrc, ctlSchOn ? "schedule" : "threshold", sizeof(ctlAutoSrc));
   ctlAutoSrc[sizeof(ctlAutoSrc) - 1] = 0;
+  // Daftar slot multi-jadwal (schN, sch1Start/sch1Dur, ...). -1 = kunci tak ada.
+  {
+    int n = (int)jNum(js, "schN", -1);
+    if (n >= 0) {
+      ctlSlotN = n > MAX_SLOTS ? MAX_SLOTS : n;
+      for (int i = 0; i < ctlSlotN; i++) {
+        char kS[12], kD[12];
+        snprintf(kS, sizeof(kS), "sch%dStart", i + 1);
+        snprintf(kD, sizeof(kD), "sch%dDur", i + 1);
+        jStr(js, kS, ctlSlotStart[i], sizeof(ctlSlotStart[i]), "");
+        int d = (int)jNum(js, kD, 10);
+        ctlSlotDur[i] = d < 1 ? 1 : (d > 180 ? 180 : d);
+      }
+    }
+  }
 }
 
 void printAddresses() {

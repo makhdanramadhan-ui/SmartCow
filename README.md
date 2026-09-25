@@ -57,4 +57,4 @@ firebase.json  .firebaserc  database.rules.json
 docs/firebase-research.md  docs/adr/  CONTEXT.md  PRODUCT.md
 ```
 
-Logika relay identik di web (`js/core.js`, ter-test) dan firmware: ON saat avg ≥ threshold, OFF saat avg ≤ threshold − hysteresis, proteksi durasi maks + cooldown. Tambahan: **jadwal harian** (jam mulai WIB + lama menit, diatur dari web, dieksekusi ESP32 pakai NTP) memaksa semprotan nyala di mode otomatis walau suhu belum menyentuh threshold.
+Logika relay identik di web (`js/core.js`, ter-test) dan firmware: mode otomatis eksklusif, pilih salah satu — (a) **suhu**: ON saat avg ≥ threshold, OFF saat avg ≤ threshold − hysteresis (+ proteksi durasi maks & cooldown); (b) **jadwal**: daftar maks 6 slot per hari, tiap slot `{jam mulai, lama nyala menit}`, ON persis di window tanpa cooldown. Tambahan: mode manual mengunci ke tombol.
