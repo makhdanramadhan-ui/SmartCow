@@ -494,27 +494,61 @@ function openDatePop(btn, i, s){
 // --- Jam popup: 24 jam (00-23) + menit, arrow atas-bawah (tahan = repeat) ---
 function openTimePop(btn, i, s){
   const today = SCS.wibDateStr();
+  let curDate = /^\d{4}-\d{2}-\d{2}$/.test(s.date) ? s.date : today;
   // Batas bawah khusus slot hari ini: sekarang+1 mnt (slot besok bebas 00:00).
   let minH = -1, minM = 0;
-  if (s.date <= today){
-    const t = new Date(Date.now() + 60000);
-    const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(t);
-    const g = (x) => p.find((y) => y.type === x).value;
-    minH = (+g('hour')) % 24; minM = +g('minute');
+  function refreshMin(){
+    if (curDate <= today){
+      const t = new Date(Date.now() + 60000);
+      const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(t);
+      const g = (x) => p.find((y) => y.type === x).value;
+      minH = (+g('hour')) % 24; minM = +g('minute');
+    } else { minH = -1; minM = 0; }
+  }
+  function addDays(iso, n){
+    const p = iso.split('-').map(Number);
+    return new Date(Date.UTC(p[0], p[1] - 1, p[2]) + n * 86400000).toISOString().slice(0, 10);
   }
   const parts = (s.start || '09:00').split(':');
   let hh = Math.min(23, Math.max(0, parseInt(parts[0]) || 0));
   let mi = Math.min(59, Math.max(0, parseInt(parts[1]) || 0));
+  refreshMin();
   if (hh < minH || (hh === minH && mi < minM)){ hh = minH; mi = minM; }
-  const el = openPop(btn, i + '-time', `<div class="pk-time">
+  const el = openPop(btn, i + '-time', `<div class="pk-date" data-v="date"></div><div class="pk-time">
       <div class="pk-col"><button data-s="h" data-d="1">▲</button><input data-v="h" value="${pad2(hh)}" inputmode="numeric" maxlength="2" autocomplete="off" /><button data-s="h" data-d="-1">▼</button><span>Jam</span></div>
       <div class="pk-sep">:</div>
       <div class="pk-col"><button data-s="m" data-d="1">▲</button><input data-v="m" value="${pad2(mi)}" inputmode="numeric" maxlength="2" autocomplete="off" /><button data-s="m" data-d="-1">▼</button><span>Menit</span></div>
     </div>
     <div class="pk-foot"><span class="hint">24 jam • WIB</span><span><button data-close>Batal</button> <button data-ok class="btn blue small">OK</button></span></div>`);
   if (!el) return;
-  const vH = el.querySelector('[data-v="h"]'), vM = el.querySelector('[data-v="m"]');
-  function paint(){ if (document.activeElement !== vH) vH.value = pad2(hh); if (document.activeElement !== vM) vM.value = pad2(mi); }
+  const vH = el.querySelector('[data-v="h"]'), vM = el.querySelector('[data-v="m"]'), vD = el.querySelector('[data-v="date"]');
+  function paintDate(){ if (vD) vD.textContent = SCS.formatIDDate(curDate) || curDate; }
+  function paint(){ if (document.activeElement !== vH) vH.value = pad2(hh); if (document.activeElement !== vM) vM.value = pad2(mi); paintDate(); }
+  // Geser jam + rollover tanggal: 23:59 +1 -> 00:00 besok; 00:00 -1 -> 23:xx kemarin (min. hari ini).
+  function rollHour(d){
+    if (d > 0){
+      if (hh >= 23){
+        const nx = addDays(curDate, 1);
+        if (nx <= '2030-12-31'){ curDate = nx; hh = 0; }
+      } else hh++;
+    } else {
+      if (hh <= 0){
+        const pv = addDays(curDate, -1);
+        if (pv >= today){ curDate = pv; hh = 23; }
+      } else hh--;
+    }
+    refreshMin();
+  }
+  function step(which, d){
+    if (which === 'h') rollHour(d);
+    else {
+      mi += d;
+      if (mi > 59){ mi = 0; rollHour(1); }
+      else if (mi < 0){ mi = 59; rollHour(-1); }
+    }
+    if (minH >= 0 && (hh < minH || (hh === minH && mi < minM))){ hh = minH; mi = minM; }
+    paint();
+  }
   // Ketik langsung: cuma digit, clamp 0-23 / 0-59 + batas bawah slot hari ini.
   function readInputs(){
     let h = parseInt((vH.value || '').replace(/\D/g, '').slice(-2), 10);
@@ -526,20 +560,6 @@ function openTimePop(btn, i, s){
   }
   vH.addEventListener('change', readInputs);
   vM.addEventListener('change', readInputs);
-  function step(which, d){
-    if (which === 'h'){
-      hh = (hh + d + 24) % 24;
-      if (hh < minH) hh = d > 0 ? minH : 23;
-      if (hh === minH && mi < minM) mi = minM;
-    } else {
-      mi += d;
-      if (mi > 59){ mi = 0; step('h', 1); return; }
-      if (mi < 0){ mi = 59; step('h', -1); return; }
-      if (hh === minH && mi < minM) mi = d > 0 ? minM : 59;
-      if (hh === minH && mi < minM && d < 0) hh = 23;
-    }
-    paint();
-  }
   let repT = null, repI = null;
   function stopRep(){ clearTimeout(repT); clearInterval(repI); repT = repI = null; }
   el.querySelectorAll('[data-s]').forEach((b) => {
@@ -559,7 +579,7 @@ function openTimePop(btn, i, s){
     readInputs(); // pastikan ketikan terakhir ikut ke-commit
     const arr = [...schedSlots()];
     if (!arr[i]){ closePicker(); return; }
-    arr[i] = { ...arr[i], start: pad2(hh) + ':' + pad2(mi) };
+    arr[i] = { ...arr[i], date: curDate, start: pad2(hh) + ':' + pad2(mi) };
     commitSlots(arr);
     closePicker();
   };
@@ -575,12 +595,12 @@ function syncButtons(){
   $('srcThreshold').checked = isThresh;
   $('srcSchedule').checked = !isThresh;
   $('srcThreshold').disabled = $('srcSchedule').disabled = locked;
-  ['inThreshold','inHyst','rangeThreshold'].forEach((id)=>{ $(id).disabled = locked || !isThresh; });
+  ['inThreshold','rangeThreshold'].forEach((id)=>{ $(id).disabled = locked || !isThresh; });
   ['inMaxDur','inCooldown'].forEach((id)=>{ $(id).disabled = locked; });
   $('btnSaveCfg').disabled = locked;
   $('btnSaveCfg').textContent = locked ? '🔒 Terkunci saat mode manual' : '💾 Simpan Pengaturan';
   $('inThreshold').value = CFG.threshold; $('rangeThreshold').value = CFG.threshold;
-  $('inHyst').value = CFG.hysteresis; $('inMaxDur').value = CFG.maxDuration; $('inCooldown').value = CFG.cooldown;
+  $('inMaxDur').value = CFG.maxDuration; $('inCooldown').value = CFG.cooldown;
   // Conditional: hanya grup yang kepilih yang tampil (yang lain display:none biar clean).
   // Mode suhu -> threshold + proteksi. Mode jadwal -> daftar slot saja (tanpa cooldown/proteksi).
   $('threshGroup').style.display = isThresh ? '' : 'none';
@@ -692,8 +712,8 @@ $('srcSchedule').onchange = () => { CFG.autoSrc = 'schedule'; CFG.schedOn = true
 $('btnSaveCfg').onclick = ()=>{
   CFG.autoSrc = $('srcSchedule').checked ? 'schedule' : 'threshold';
   CFG.schedOn = CFG.autoSrc === 'schedule';
-  CFG.threshold = Math.min(40, Math.max(25, parseFloat($('inThreshold').value)||30));
-  CFG.hysteresis = parseFloat($('inHyst').value)||1;
+  CFG.threshold = Math.min(40, Math.max(20, parseFloat($('inThreshold').value)||30));
+  CFG.hysteresis = 1.0; // tetap sebagai proteksi anti cetak-cetek relay, disembunyikan dari UI
   CFG.maxDuration = parseInt($('inMaxDur').value)||120;
   CFG.cooldown = parseInt($('inCooldown').value)||60;
   CFG.schedules = readSchedList();
