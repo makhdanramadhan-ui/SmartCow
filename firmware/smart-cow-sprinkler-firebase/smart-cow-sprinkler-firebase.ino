@@ -63,7 +63,7 @@ int ctlMaxDur = 120, ctlCooldown = 60;
 
 bool ssrOn = false;
 unsigned long sprayStart = 0, lastSprayEnd = 0;
-unsigned long tTele = 0, tCtl = 0, tLog = 0;
+unsigned long tTele = 0, tCtl = 0, tLog = 0, tScan = 0;
 
 String devPath(const String &leaf) {
   return String(DATABASE_URL) + "/devices/" + DEVICE_ID + "/" + leaf + ".json?auth=" + DATABASE_SECRET;
@@ -71,6 +71,8 @@ String devPath(const String &leaf) {
 
 bool fbPut(const String &path, const String &payload) {
   http.begin(tls, devPath(path));
+  http.setTimeout(4000);
+  http.setReuse(true);
   http.addHeader("Content-Type", "application/json");
   int code = http.PUT(payload);
   http.end();
@@ -80,15 +82,19 @@ bool fbPut(const String &path, const String &payload) {
 
 bool fbPost(const String &path, const String &payload) {
   http.begin(tls, devPath(path));
+  http.setTimeout(4000);
+  http.setReuse(true);
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(payload);
   http.end();
   if (code < 200 || code >= 300) { Serial.printf("POST %s gagal: %d\n", path.c_str(), code); return false; }
   return true;
 }
-
+  
 String fbGet(const String &path) {
   http.begin(tls, devPath(path));
+  http.setTimeout(4000);
+  http.setReuse(true);
   int code = http.GET();
   String body = (code == 200) ? http.getString() : "";
   http.end();
@@ -293,5 +299,11 @@ void loop() {
   if (now - tTele >= TELEMETRY_MS) { tTele = now; sendTelemetry(avg); }
   if (now - tCtl >= CONTROL_MS) { tCtl = now; pollControl(); }
   if (now - tLog >= LOG_MS) { tLog = now; sendLog(avg); }
+  if (now - tScan >= 60000) { // scan ulang bus tiap 1 menit, sensor goyang ikut ketemu lagi
+    tScan = now;
+    dallas.begin();
+    int n = dallas.getDeviceCount();
+    if (n != devCount) { devCount = n; Serial.printf("Rescan bus: %d sensor\n", devCount); }
+  }
   delay(10);
 }
