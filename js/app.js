@@ -720,6 +720,7 @@ $('btnAddSched').onclick = ()=>{
 // ---------- SIDEBAR + HALAMAN (dashboard / log / event) ----------
 function setSide(open){
   const sb = $('sidebar'); if (!sb) return;
+  try { console.log('[side] setSide', open); } catch {}
   sb.classList.toggle('open', !!open);
   sb.setAttribute('aria-hidden', open ? 'false' : 'true');
   const ov = $('sideOverlay'); if (ov) ov.hidden = !open;

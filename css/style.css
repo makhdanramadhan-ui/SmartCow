@@ -7,7 +7,7 @@
 *{box-sizing:border-box}
 body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-gradient(1200px 600px at 20% -10%,#1b2b52,transparent),radial-gradient(1000px 500px at 90% 0%,#0e3a3a,transparent),var(--bg);color:var(--txt);min-height:100vh}
 .bg-decor{position:fixed;inset:0;pointer-events:none;opacity:.5;background-image:radial-gradient(#ffffff10 1px,transparent 1px);background-size:26px 26px;mask-image:linear-gradient(to bottom,black,transparent 70%)}
-.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 28px;border-bottom:1px solid var(--line);background:#0b1220cc;backdrop-filter:blur(8px);position:sticky;top:0;z-index:10;flex-wrap:wrap}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 28px;border-bottom:1px solid var(--line);background:#0b1220cc;backdrop-filter:blur(8px);flex-wrap:wrap}
 .brand{display:flex;gap:14px;align-items:center}
 .logo{font-size:42px;background:#1a2547;border:1px solid var(--line);width:64px;height:64px;display:grid;place-items:center;border-radius:18px}
 .brand h1{margin:0;font-size:22px;letter-spacing:.3px}
