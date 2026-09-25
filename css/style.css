@@ -95,8 +95,13 @@ body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-grad
 .sched-group>span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
 .sched-inline{display:flex;gap:4px;align-items:center;background:#0b142c;border:1px solid var(--line);border-radius:10px;padding:6px 8px}
 .sched-inline input{background:transparent;border:none;outline:none;color:var(--txt);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;text-align:center;color-scheme:dark}
-.sched-inline input[data-dur]{width:44px}
 .sched-inline i{font-style:normal;color:var(--muted);font-weight:700}
+.sched-inline.step button{background:transparent;border:1px solid var(--line);color:var(--txt);width:26px;height:26px;border-radius:8px;font-size:15px;font-weight:800;cursor:pointer;line-height:1;user-select:none;-webkit-user-select:none;touch-action:none;flex:none}
+.sched-inline.step button:hover:not(:disabled){border-color:var(--blue)}
+.sched-inline.step button:disabled{opacity:.35;cursor:not-allowed}
+.sched-inline.step b{min-width:32px;text-align:center;font-size:15px;font-variant-numeric:tabular-nums}
+.mode-info{font-size:12px;color:var(--muted);background:#0b142c;border:1px dashed var(--line);border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.55}
+[data-theme="light"] .mode-info{background:#f8fafc}
 .sched-inline input::-webkit-outer-spin-button,.sched-inline input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .sched-inline input[type="number"]{-moz-appearance:textfield;appearance:textfield}
 .sched-del{flex:none}
@@ -142,9 +147,6 @@ body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-grad
 .src-card span{font-size:11px;color:var(--muted)}
 .src-card:has(input:checked){border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
 .src-card:has(input:disabled){opacity:.45;cursor:not-allowed}
-.sched-toggle{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--txt);margin-bottom:8px;cursor:pointer}
-.sched-toggle input{width:18px;height:18px;accent-color:var(--blue)}
-#fbStatus{margin-top:8px}
 .table-wrap{overflow:auto;max-height:380px;border:1px solid var(--line);border-radius:12px}
 table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
 thead th{position:sticky;top:0;background:#1a2547;padding:10px;white-space:nowrap;text-align:center}
