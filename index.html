@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Smart Cow Sprinkler System</title>
-<link rel="stylesheet" href="css/style.css?v=18" />
+<link rel="stylesheet" href="css/style.css?v=19" />
 </head>
 <body>
 <div class="bg-decor"></div>
@@ -194,9 +194,20 @@
 </main>
 
 <footer>Smart Cow Sprinkler System</footer>
-<script src="js/core.js?v=18"></script>
-<script src="js/config.js?v=18"></script>
-<script src="js/firebase-config.js?v=18"></script>
+
+<div id="confirmOverlay" class="confirm-overlay" hidden>
+  <div class="confirm-box">
+    <div id="confirmTitle">Yakin?</div>
+    <div id="confirmMsg" class="hint"></div>
+    <div class="confirm-actions">
+      <button id="confirmNo" class="btn small">Batal</button>
+      <button id="confirmYes" class="btn red small">Ya, hapus</button>
+    </div>
+  </div>
+</div>
+<script src="js/core.js?v=19"></script>
+<script src="js/config.js?v=19"></script>
+<script src="js/firebase-config.js?v=19"></script>
 <script>
 window.addEventListener('error', function (e) {
   if (!window.SCSFirebase && e.message && e.message !== 'Script error.') {
@@ -205,7 +216,7 @@ window.addEventListener('error', function (e) {
   }
 }, true);
 </script>
-<script type="module" src="js/firebase.js?v=18"></script>
-<script src="js/app.js?v=18"></script>
+<script type="module" src="js/firebase.js?v=19"></script>
+<script src="js/app.js?v=19"></script>
 </body>
 </html>
