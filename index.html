@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Smart Cow Sprinkler System</title>
+<link rel="stylesheet" href="css/style.css?v=6" />
+</head>
+<body>
+<div class="bg-decor"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">🐄</div>
+    <div>
+      <h1>Smart Cow Sprinkler System</h1>
+      <p>Monitoring Suhu Kandang &amp; Penyemprot Otomatis • 6× DS18B20</p>
+    </div>
+  </div>
+  <div class="top-right">
+    <div class="clock-card">
+      <div id="clock" class="clock">--:--:--</div>
+      <div id="dateLine" class="date-line">Memuat waktu…</div>
+      <div class="wib-badge">WIB • Asia/Jakarta</div>
+    </div>
+    <div id="connBadge" class="badge sim">● MENGHUBUNGKAN…</div>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- STATUS RINGKAS -->
+  <section class="grid grid-3">
+    <div class="card highlight">
+      <div class="card-label">Rata-rata Suhu Kandang</div>
+      <div class="avg-value"><span id="avgTemp">--.-</span><span class="unit">°C</span></div>
+      <div id="avgStatus" class="status-pill normal">NORMAL</div>
+      <div class="mini-stats">
+        <div>Min <b id="minTemp">--</b></div>
+        <div>Max <b id="maxTemp">--</b></div>
+        <div>Threshold <b id="thresholdLabel">30.0°C</b></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">Status Sprinkler (Solenoid via SSR)</div>
+      <div id="sprinklerState" class="sprinkler off"><span class="dot"></span><span id="sprinklerText">MATI</span></div>
+      <div id="sprinklerReason" class="reason">Menunggu data sensor…</div>
+      <div id="sprinklerTimer" class="timer"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Mode Operasi</div>
+      <div class="mode-switch">
+        <button id="btnAuto" class="mode-btn active">🤖 OTOMATIS</button>
+        <button id="btnManual" class="mode-btn">✋ MANUAL</button>
+      </div>
+      <div class="manual-controls">
+        <button id="btnSprayOn" class="btn green" disabled>💦 Nyalakan Manual</button>
+        <button id="btnSprayOff" class="btn red" disabled>⛔ Matikan Manual</button>
+      </div>
+      <div class="hint">Mode manual mengunci kontrol ke tombol di atas.</div>
+      <div id="fbStatus" class="hint">Menghubungkan ke Firebase…</div>
+    </div>
+  </section>
+
+  <!-- 6 SENSOR -->
+  <section>
+    <div class="section-title">
+      <h2 id="sensorTitle">🌡️ Menunggu data sensor…</h2>
+      <span id="updateAge" class="hint">update: -</span>
+    </div>
+    <div id="sensorGrid" class="grid grid-6"></div>
+    <div id="noSensor" class="notice" style="display:none">⚠️ Tidak ada sensor terdeteksi. Cek wiring bus OneWire di GPIO4, resistor pull-up 4.7kΩ ke 3V3, dan power 3V3, lalu reset ESP.</div>
+  </section>
+
+  <!-- GRAFIK + KONTROL -->
+  <section class="grid grid-2">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h3>📈 Grafik Suhu — 1 Jam Terakhir</h3>
+          <p class="hint">Rata-rata + 6 sensor • geser otomatis • sampel tiap 2 detik</p>
+        </div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <canvas id="chart" height="220"></canvas>
+      <div class="chart-controls">
+        <label><input type="checkbox" id="showAvg" checked /> Rata-rata</label>
+        <button id="btnClearChart" class="btn small">Bersihkan Grafik</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>⚙️ Pengaturan Threshold &amp; Proteksi</h3>
+      <div class="form-grid">
+        <label>Threshold semprot (°C)
+          <input id="inThreshold" type="number" step="0.1" min="25" max="40" value="30.0" />
+        </label>
+        <label>Hysteresis (°C)
+          <input id="inHyst" type="number" step="0.1" min="0.2" max="3" value="1.0" />
+        </label>
+        <label>Durasi semprot maks (detik)
+          <input id="inMaxDur" type="number" step="1" min="10" max="600" value="120" />
+        </label>
+        <label>Cooldown antar semprot (detik)
+          <input id="inCooldown" type="number" step="1" min="0" max="600" value="60" />
+        </label>
+      </div>
+      <div class="range-row">
+        <input id="rangeThreshold" type="range" min="27" max="35" step="0.1" value="30" />
+      </div>
+      <button id="btnSaveCfg" class="btn blue full">💾 Simpan Pengaturan</button>
+      <div class="sched-box">
+        <label class="sched-toggle"><input type="checkbox" id="inSchedOn" /> Jadwal semprot harian (mode otomatis)</label>
+        <div class="form-grid">
+          <label>Jam mulai (WIB)
+            <input id="inSchedStart" type="time" value="12:00" />
+          </label>
+          <label>Lama nyala (menit)
+            <input id="inSchedDur" type="number" step="1" min="1" max="180" value="10" />
+          </label>
+        </div>
+        <div id="schedHint" class="hint"></div>
+      </div>
+      <div class="logic-box">
+        <b>Logika Otomatis:</b>
+        <code>IF avg ≥ threshold → SSR ON (solenoid buka) • IF avg ≤ threshold − hysteresis → SSR OFF</code>
+        <div id="logicPreview" class="hint"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOG SUHU -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h3>🧾 Log Suhu — 1 Jam Terakhir (Report)</h3>
+        <p class="hint">Dicatat tiap 30 detik • Maks 120 baris • Tersimpan di browser (localStorage)</p>
+      </div>
+      <div class="toolbar">
+        <select id="filterSensor">
+          <option value="all">Semua kondisi</option>
+          <option value="panas">Hanya ≥ threshold</option>
+          <option value="normal">Hanya &lt; threshold</option>
+        </select>
+        <button id="btnExport" class="btn green small">⬇ Export CSV</button>
+        <button id="btnClearLog" class="btn red small">🗑 Hapus</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr id="logHead"></tr>
+        </thead>
+        <tbody id="logBody">
+          <tr><td colspan="10" class="empty">Belum ada log — tunggu ±30 detik atau klik “Catat Sekarang”.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="log-footer">
+      <span id="logCount" class="hint">0 baris</span>
+      <button id="btnLogNow" class="btn small">✎ Catat Sekarang</button>
+    </div>
+  </section>
+
+  <!-- EVENT + INFO -->
+  <section class="grid grid-2">
+    <div class="card">
+      <h3>🔔 Event Sprinkler</h3>
+      <ul id="eventList" class="events"><li class="hint">Belum ada event.</li></ul>
+    </div>
+    <div class="card">
+      <h3>🔌 Skema &amp; Integrasi ESP32</h3>
+      <ol class="steps">
+        <li>6× DS18B20 <b>satu bus OneWire di GPIO4</b> (DQ gabung, pull-up 4.7kΩ ke 3V3, power eksternal 3V3, bukan parasite).</li>
+        <li>GPIO <code>D23</code> → SSR IN → Solenoid Valve (AC 220V via steker, sudah disediakan mitra).</li>
+        <li>Flash <code>firmware/smart-cow-sprinkler-firebase.ino</code> dari Arduino IDE, isi WiFi + URL DB + Database Secret di bagian atas file.</li>
+        <li>ESP32 kirim telemetri tiap 2 dtk ke <code>devices/cow-sprinkler-01/telemetry/latest</code>, baca perintah dari <code>.../control</code>.</li>
+        <li>Buka web yang sudah deploy, datanya mengalir otomatis. Perintah dari web (mode, threshold, jadwal, manual) dibaca ESP32 tiap 5 dtk.</li>
+      </ol>
+      <div class="hint">Detail lengkap + wiring ada di <code>README.md</code>. Web butuh ESP32 online untuk menampilkan data.</div>
+    </div>
+  </section>
+
+</main>
+
+<footer>Smart Cow Sprinkler • Semester 5 • Web Projek IoT • Firebase Realtime • ESP32 • DS18B20</footer>
+<script src="js/core.js?v=6"></script>
+<script src="js/config.js?v=6"></script>
+<script src="js/firebase-config.js?v=6"></script>
+<script>
+window.addEventListener('error', function (e) {
+  if (!window.SCSFirebase && e.message && e.message !== 'Script error.') {
+    var el = document.getElementById('fbStatus');
+    if (el) el.textContent = 'SDK error: ' + e.message + ' @ ' + (e.filename || '?') + ':' + (e.lineno || '?');
+  }
+}, true);
+</script>
+<script type="module" src="js/firebase.js?v=6"></script>
+<script src="js/app.js?v=6"></script>
+</body>
+</html>
