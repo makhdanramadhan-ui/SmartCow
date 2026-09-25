@@ -4,14 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Smart Cow Sprinkler System</title>
-<link rel="stylesheet" href="css/style.css?v=24" />
+<link rel="stylesheet" href="css/style.css?v=25" />
 </head>
 <body>
 <div class="bg-decor"></div>
 
 <header class="topbar">
   <div class="brand">
-    <button id="menuBtn" class="menu-btn" title="Menu" onclick="openSide()">☰</button>
     <div class="logo">🐄</div>
     <div>
       <h1>Smart Cow Sprinkler System</h1>
@@ -29,13 +28,11 @@
   </div>
 </header>
 
-<div id="sideOverlay" class="side-overlay" hidden onclick="closeSide()"></div>
-<aside id="sidebar" class="sidebar" aria-hidden="true">
-  <div class="side-head"><span>🐄 Menu</span><button id="sideClose" title="Tutup" onclick="closeSide()">✕</button></div>
-  <button class="side-link active" data-page="dash" onclick="showPage('dash')">📊 Dashboard</button>
-  <button class="side-link" data-page="log" onclick="showPage('log')">🧾 Log Suhu</button>
-  <button class="side-link" data-page="event" onclick="showPage('event')">🔔 Event Sprinkler</button>
-</aside>
+<nav class="pagenav">
+  <button class="tab-link active" data-page="dash" onclick="showPage('dash')">📊 Dashboard</button>
+  <button class="tab-link" data-page="log" onclick="showPage('log')">🧾 Log Suhu</button>
+  <button class="tab-link" data-page="event" onclick="showPage('event')">🔔 Event Sprinkler</button>
+</nav>
 
 <main class="container">
 
@@ -205,9 +202,9 @@
     </div>
   </div>
 </div>
-<script src="js/core.js?v=24"></script>
-<script src="js/config.js?v=24"></script>
-<script src="js/firebase-config.js?v=24"></script>
+<script src="js/core.js?v=25"></script>
+<script src="js/config.js?v=25"></script>
+<script src="js/firebase-config.js?v=25"></script>
 <script>
 window.addEventListener('error', function (e) {
   if (!window.SCSFirebase && e.message && e.message !== 'Script error.') {
@@ -216,7 +213,7 @@ window.addEventListener('error', function (e) {
   }
 }, true);
 </script>
-<script type="module" src="js/firebase.js?v=24"></script>
-<script src="js/app.js?v=24"></script>
+<script type="module" src="js/firebase.js?v=25"></script>
+<script src="js/app.js?v=25"></script>
 </body>
 </html>

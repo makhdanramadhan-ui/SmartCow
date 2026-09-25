@@ -717,42 +717,26 @@ $('btnAddSched').onclick = ()=>{
   saveCfg(); syncButtons();
 };
 
-// ---------- SIDEBAR + HALAMAN (dashboard / log / event) ----------
-function setSide(open){
-  const sb = $('sidebar'); if (!sb) return;
-  try { console.log('[side] setSide', open); } catch {}
-  sb.classList.toggle('open', !!open);
-  sb.setAttribute('aria-hidden', open ? 'false' : 'true');
-  const ov = $('sideOverlay'); if (ov) ov.hidden = !open;
-}
-function openSide(){ setSide(true); }
-function closeSide(){ setSide(false); }
+// ---------- HALAMAN (dashboard / log / event) via tab bar ----------
 function showPage(p){
   if (p !== 'log' && p !== 'event') p = 'dash';
   document.querySelectorAll('main.container > section').forEach((s) => {
     s.style.display = (!s.dataset.page || s.dataset.page === p) ? '' : 'none';
   });
-  document.querySelectorAll('.side-link').forEach((b) => b.classList.toggle('active', b.dataset.page === p));
+  document.querySelectorAll('.tab-link').forEach((b) => b.classList.toggle('active', b.dataset.page === p));
   try { localStorage.setItem('scs_page', p); } catch {}
-  closeSide();
   window.scrollTo(0, 0);
   if (p === 'dash' && typeof drawChart === 'function') drawChart(); // canvas butuh redraw pas tampil lagi
 }
 // ---------- INIT (sumber tunggal: Firebase) ----------
 applyTheme(curTheme());
 $('themeBtn').onclick = ()=> applyTheme(curTheme() === 'light' ? 'dark' : 'light');
-$('menuBtn').addEventListener('click', openSide);
-$('sideClose').addEventListener('click', (e) => { e.stopPropagation(); closeSide(); });
-$('sideOverlay').addEventListener('click', closeSide);
-// Pengaman lapis dua: delegasi klik untuk tombol tutup (kalau wiring langsung terlewat).
-document.addEventListener('click', (e) => {
-  if (e.target && e.target.closest && e.target.closest('#sideClose')) closeSide();
-});
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape'){ closeSide(); closeConfirm(false); } });
+document.querySelectorAll('.tab-link').forEach((b) => { b.addEventListener('click', () => showPage(b.dataset.page)); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape'){ closeConfirm(false); } });
 $('confirmYes').onclick = () => closeConfirm(true);
 $('confirmNo').onclick = () => closeConfirm(false);
 $('confirmOverlay').addEventListener('pointerdown', (e) => { if (e.target === $('confirmOverlay')) closeConfirm(false); });
-document.querySelectorAll('.side-link').forEach((b) => { b.onclick = () => showPage(b.dataset.page); });
+document.querySelectorAll('.tab-link').forEach((b) => { b.addEventListener('click', () => showPage(b.dataset.page)); });
 buildGrid(6); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
 try { showPage(localStorage.getItem('scs_page') || 'dash'); } catch { showPage('dash'); }
 fbConnect();
