@@ -27,17 +27,20 @@ const DEFAULT_CFG = {
   // Durasi = lama nyala slot itu. Tanpa cooldown. Maks 6 slot. Yang kedaluwarsa auto-hapus.
   schedules: defaultSchedules(),
 };
-let CFG = { ...DEFAULT_CFG, ...(JSON.parse(localStorage.getItem('scs_cfg') || '{}')) };
+let __stored = {};
+try { __stored = JSON.parse(localStorage.getItem('scs_cfg') || '{}'); } catch { __stored = {}; }
+let CFG = { ...DEFAULT_CFG, ...__stored };
 // Migrasi: format lama (schedOn/schedStart/schedDur atau slot tanpa tanggal) -> slot bertanggal hari ini.
 if (!CFG.autoSrc) CFG.autoSrc = CFG.schedOn ? 'schedule' : 'threshold';
 CFG.schedOn = CFG.autoSrc === 'schedule';
 try {
   const t = todayWIB(), now = Date.now();
-  let slots = SCS.schedulesOf(CFG, t);
-  slots = SCS.prunePastSlots(slots, now); // autoreset: buang yang sudah lewat
-  CFG.schedules = slots.length ? slots : defaultSchedules();
+  let slots = SCS.prunePastSlots(SCS.schedulesOf(CFG, t), now); // autoreset: buang yang sudah lewat
+  if (slots.length) CFG.schedules = slots;
+  else if (!('schedules' in __stored)) CFG.schedules = defaultSchedules(); // pertama kali: contoh 3 slot
+  else CFG.schedules = []; // user mengosongkan / semua kedaluwarsa -> boleh kosong
 } catch {
-  if (!Array.isArray(CFG.schedules) || !CFG.schedules.length) CFG.schedules = defaultSchedules();
+  if (!Array.isArray(CFG.schedules)) CFG.schedules = [];
 }
 delete CFG.schedStart; delete CFG.schedDur;
 
