@@ -227,8 +227,28 @@ function renderLogs(){
 }
 $('filterSensor').onchange = renderLogs;
 $('btnLogNow').onclick = ()=>{ const avg = SCS.avgOf(temps); lastLogTime = 0; addLogRow(avg); };
-$('btnClearLog').onclick = ()=>{ if(confirm('Hapus semua log?')){ logs=[]; localStorage.removeItem('scs_logs'); renderLogs(); } };
-$('btnClearEvents').onclick = ()=>{ if(confirm('Hapus semua event?')){ events=[]; localStorage.removeItem('scs_events'); renderEvents(); } };
+$('btnClearLog').onclick = async ()=>{
+  if (await askConfirm('🗑 Hapus semua log?', 'Semua baris log di browser akan hilang. Data di Firebase tetap ada.')){
+    logs=[]; localStorage.removeItem('scs_logs'); renderLogs();
+  }
+};
+$('btnClearEvents').onclick = async ()=>{
+  if (await askConfirm('🗑 Hapus semua event?', 'Semua event di browser akan hilang. Data di Firebase tetap ada.')){
+    events=[]; localStorage.removeItem('scs_events'); renderEvents();
+  }
+};
+// ---------- MODAL KONFIRMASI CUSTOM (pengganti confirm() bawaan, ikut tema) ----------
+let confirmRes = null;
+function askConfirm(title, msg){
+  $('confirmTitle').textContent = title || 'Yakin?';
+  $('confirmMsg').textContent = msg || '';
+  $('confirmOverlay').hidden = false;
+  return new Promise((res) => { confirmRes = res; });
+}
+function closeConfirm(v){
+  $('confirmOverlay').hidden = true;
+  if (confirmRes){ const r = confirmRes; confirmRes = null; r(v); }
+}
 $('btnExport').onclick = ()=>{
   let csv = 'waktu_wib,' + Array.from({length: renderedCount}, (_,i)=>'s'+(i+1)).join(',') + ',avg,status,sprinkler\n';
   [...logs].reverse().forEach(r=>{
@@ -704,7 +724,10 @@ $('themeBtn').onclick = ()=> applyTheme(curTheme() === 'light' ? 'dark' : 'light
 $('menuBtn').onclick = openSide;
 $('sideClose').onclick = closeSide;
 $('sideOverlay').onclick = closeSide;
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSide(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape'){ closeSide(); closeConfirm(false); } });
+$('confirmYes').onclick = () => closeConfirm(true);
+$('confirmNo').onclick = () => closeConfirm(false);
+$('confirmOverlay').addEventListener('pointerdown', (e) => { if (e.target === $('confirmOverlay')) closeConfirm(false); });
 document.querySelectorAll('.side-link').forEach((b) => { b.onclick = () => showPage(b.dataset.page); });
 buildGrid(6); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
 try { showPage(localStorage.getItem('scs_page') || 'dash'); } catch { showPage('dash'); }
