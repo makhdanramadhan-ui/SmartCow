@@ -63,10 +63,38 @@
     if (start + dur <= 1440) return cur >= start && cur < start + dur;
     return cur >= start || cur < (start + dur) % 1440;
   }
+  // Daftar slot jadwal ternormalisasi: [{start:'HH:MM', dur:menit}].
+  // Migrasi: format lama schedStart/schedDur tunggal -> 1 slot.
+  function schedulesOf(cfg) {
+    if (cfg && Array.isArray(cfg.schedules)) {
+      return cfg.schedules
+        .filter((s) => s && typeof s.start === 'string' && isFinite(hmToMin(s.start)) && +s.dur > 0)
+        .slice(0, 6)
+        .map((s) => ({ start: s.start, dur: Math.min(180, Math.max(1, Math.round(+s.dur))) }));
+    }
+    if (cfg && typeof cfg.schedStart === 'string' && isFinite(hmToMin(cfg.schedStart)) && +cfg.schedDur > 0)
+      return [{ start: cfg.schedStart, dur: Math.min(180, Math.max(1, Math.round(+cfg.schedDur))) }];
+    return [];
+  }
+  // true bila ada SATU slot pun yang sedang berjalan. Durasi tiap slot = lama nyala (tanpa cooldown).
+  function anyScheduleActive(cur, slots) {
+    return (slots || []).some((s) => scheduleActive(cur, hmToMin(s.start), s.dur));
+  }
+  // Slot berikutnya yang akan jalan (untuk hint). null bila tidak ada slot valid.
+  function nextSchedule(cur, slots) {
+    let best = null;
+    (slots || []).forEach((s) => {
+      const st = hmToMin(s.start);
+      if (!isFinite(st) || !(s.dur > 0)) return;
+      const delta = (st - cur + 1440) % 1440;
+      if (!best || delta < best.delta) best = { start: s.start, dur: s.dur, delta };
+    });
+    return best;
+  }
   function logToCsv(r, threshold) {
     const w = new Date(r.t).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
     const st = r.avg >= threshold ? 'PANAS' : 'NORMAL';
     return `"${w}",${r.s.join(',')},${r.avg},${st},${r.spray ? 'ON' : 'OFF'}`;
   }
-  return { decideSprinkler, decideAuto, autoSrcOf, classify, avgOf, pruneLogs, logToCsv, hmToMin, scheduleActive, sensorTitle, visibleCount };
+  return { decideSprinkler, decideAuto, autoSrcOf, classify, avgOf, pruneLogs, logToCsv, hmToMin, scheduleActive, schedulesOf, anyScheduleActive, nextSchedule, sensorTitle, visibleCount };
 });

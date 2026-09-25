@@ -136,18 +136,20 @@ function autoControl(avg){
     if (CFG.mode==='auto' && fbConnected){
       if (curAutoSrc() === 'schedule'){
         const act = schedActiveNow();
+        const slots = schedSlots();
+        const daftar = slots.map((s) => `${s.start}`).join(', ');
         $('sprinklerReason').textContent = act
-          ? `Rekomendasi: NYALA (jadwal ${CFG.schedStart}, ${CFG.schedDur} mnt). ESP mengeksekusi.`
-          : `Standby jadwal — di luar window ${CFG.schedStart} +${CFG.schedDur} mnt.`;
+          ? `Rekomendasi: NYALA (jadwal ${daftar}). ESP mengeksekusi.`
+          : `Standby jadwal (${slots.length}×: ${daftar}).`;
       } else if (avg >= CFG.threshold && !sprinklerOn) $('sprinklerReason').textContent = `Rekomendasi: NYALA (avg ${avg.toFixed(1)} ≥ ${CFG.threshold.toFixed(1)}°C). ESP mengeksekusi.`;
       else if (avg <= CFG.threshold - CFG.hysteresis && sprinklerOn) $('sprinklerReason').textContent = 'Rekomendasi: MATI.';
     }
     return;
   }
   const d = SCS.decideAuto(avg, sprinklerOn, CFG, schedActiveNow());
-  if (d === 'on') setSprinkler(true, curAutoSrc() === 'schedule' ? `jadwal ${CFG.schedStart}` : `avg ${avg.toFixed(1)}°C ≥ threshold ${CFG.threshold.toFixed(1)}°C`);
+  if (d === 'on') setSprinkler(true, curAutoSrc() === 'schedule' ? 'jadwal harian' : `avg ${avg.toFixed(1)}°C ≥ threshold ${CFG.threshold.toFixed(1)}°C`);
   else if (d === 'off') setSprinkler(false, curAutoSrc() === 'schedule' ? 'jadwal selesai' : `avg ${avg.toFixed(1)}°C ≤ ${(CFG.threshold-CFG.hysteresis).toFixed(1)}°C (hysteresis)`);
-  else if (!sprinklerOn) $('sprinklerReason').textContent = curAutoSrc() === 'schedule' ? `Standby jadwal — menunggu window ${CFG.schedStart}.` : `Standby — avg ${avg.toFixed(1)}°C < ${CFG.threshold.toFixed(1)}°C`;
+  else if (!sprinklerOn) $('sprinklerReason').textContent = curAutoSrc() === 'schedule' ? 'Standby jadwal — menunggu jam semprot.' : `Standby — avg ${avg.toFixed(1)}°C < ${CFG.threshold.toFixed(1)}°C`;
 }
 
 // ---------- DATA MASUK (dari Firebase via ESP32) ----------
@@ -258,10 +260,50 @@ function curAutoSrc(){
   if (typeof SCS !== 'undefined' && SCS.autoSrcOf) return SCS.autoSrcOf(CFG);
   return CFG.autoSrc || (CFG.schedOn ? 'schedule' : 'threshold');
 }
+function schedSlots(){ return SCS.schedulesOf(CFG); }
 function schedActiveNow(){
-  const s = SCS.hmToMin(CFG.schedStart);
-  if (!isFinite(s)) return false;
-  return SCS.scheduleActive(wibMinutes(), s, CFG.schedDur);
+  return SCS.anyScheduleActive(wibMinutes(), schedSlots());
+}
+// ---------- EDITOR DAFTAR JADWAL (maks 6 slot) ----------
+function renderSchedList(){
+  const box = $('schedList'); if (!box) return;
+  const locked = CFG.mode !== 'auto';
+  box.innerHTML = '';
+  schedSlots().forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'sched-row';
+    row.innerHTML = `<span class="sched-num">${i + 1}</span>
+      <input type="time" data-i="${i}" data-k="start" value="${s.start}" ${locked ? 'disabled' : ''} />
+      <input type="number" data-i="${i}" data-k="dur" step="1" min="1" max="180" value="${s.dur}" title="Lama nyala (menit)" ${locked ? 'disabled' : ''} />
+      <span class="hint">mnt</span>
+      <button class="btn red small" data-del="${i}" title="Hapus jadwal ini" ${locked ? 'disabled' : ''}>✕</button>`;
+    box.appendChild(row);
+  });
+  box.querySelectorAll('input').forEach((el) => {
+    el.onchange = () => { CFG.schedules = readSchedList(); saveCfg(); syncButtons(); };
+  });
+  box.querySelectorAll('[data-del]').forEach((btn) => {
+    btn.onclick = () => {
+      const cur = readSchedList();
+      cur.splice(+btn.dataset.del, 1);
+      CFG.schedules = cur.length ? cur : [{ start: '09:00', dur: 10 }];
+      saveCfg(); syncButtons(); pushEvent('Jadwal dihapus, sisa ' + CFG.schedules.length + '× sehari'); fbPushControl();
+    };
+  });
+  const add = $('btnAddSched'); if (add) add.disabled = CFG.mode !== 'auto' || schedSlots().length >= 6;
+}
+function readSchedList(){
+  const box = $('schedList'); if (!box) return schedSlots();
+  const rows = [...box.querySelectorAll('.sched-row')];
+  const out = [];
+  rows.forEach((row) => {
+    const st = row.querySelector('[data-k="start"]').value || '';
+    const du = Math.min(180, Math.max(1, parseInt(row.querySelector('[data-k="dur"]').value) || 10));
+    if (!isFinite(SCS.hmToMin(st))) return;
+    if (!out.some((s) => s.start === st)) out.push({ start: st, dur: du });
+  });
+  out.sort((a, b) => SCS.hmToMin(a.start) - SCS.hmToMin(b.start));
+  return out.length ? out.slice(0, 6) : [{ start: '09:00', dur: 10 }];
 }
 function syncButtons(){
   $('btnAuto').classList.toggle('active', CFG.mode==='auto');
@@ -275,15 +317,17 @@ function syncButtons(){
   $('srcThreshold').disabled = $('srcSchedule').disabled = locked;
   ['inThreshold','inHyst','rangeThreshold'].forEach((id)=>{ $(id).disabled = locked || !isThresh; });
   ['inMaxDur','inCooldown'].forEach((id)=>{ $(id).disabled = locked; });
-  ['inSchedStart','inSchedDur'].forEach((id)=>{ $(id).disabled = locked || isThresh; });
+  ['inMaxDur','inCooldown'].forEach((id)=>{ $(id).disabled = locked; });
   $('btnSaveCfg').disabled = locked;
   $('btnSaveCfg').textContent = locked ? '🔒 Terkunci saat mode manual' : '💾 Simpan Pengaturan';
   $('inThreshold').value = CFG.threshold; $('rangeThreshold').value = CFG.threshold;
   $('inHyst').value = CFG.hysteresis; $('inMaxDur').value = CFG.maxDuration; $('inCooldown').value = CFG.cooldown;
-  $('inSchedStart').value = CFG.schedStart; $('inSchedDur').value = CFG.schedDur;
   // Conditional: hanya grup yang kepilih yang tampil (yang lain display:none biar clean).
+  // Mode suhu -> threshold + proteksi. Mode jadwal -> daftar slot saja (tanpa cooldown/proteksi).
   $('threshGroup').style.display = isThresh ? '' : 'none';
+  $('protectGroup').style.display = isThresh ? '' : 'none';
   $('schedGroup').style.display = isThresh ? 'none' : '';
+  renderSchedList();
   updateSchedHint();
 }
 $('btnAuto').onclick = ()=>{ CFG.mode='auto'; saveCfg(); syncButtons(); pushEvent('Mode → OTOMATIS'); fbPushControl(); };
@@ -292,7 +336,12 @@ $('btnSprayOn').onclick = ()=> setSprinkler(true, 'tombol manual');
 $('btnSprayOff').onclick = ()=> setSprinkler(false, 'tombol manual');
 function fbPushControl(){
   if (fbConnected && window.SCSFirebase){
-    SCSFirebase.pushControl({ mode: CFG.mode, autoSrc: curAutoSrc(), threshold: CFG.threshold, hysteresis: CFG.hysteresis, maxDuration: CFG.maxDuration, cooldown: CFG.cooldown, schOn: curAutoSrc() === 'schedule' ? 1 : 0, schStart: CFG.schedStart, schDur: CFG.schedDur });
+    const slots = schedSlots();
+    const ctl = { mode: CFG.mode, autoSrc: curAutoSrc(), threshold: CFG.threshold, hysteresis: CFG.hysteresis, maxDuration: CFG.maxDuration, cooldown: CFG.cooldown, schN: slots.length, schOn: curAutoSrc() === 'schedule' && slots.length ? 1 : 0 };
+    slots.forEach((s, i) => { ctl['sch' + (i + 1) + 'Start'] = s.start; ctl['sch' + (i + 1) + 'Dur'] = s.dur; });
+    // Kompatibel firmware lama (1 jadwal): slot pertama.
+    if (slots.length){ ctl.schStart = slots[0].start; ctl.schDur = slots[0].dur; }
+    SCSFirebase.pushControl(ctl);
   }
 }
 function wibMinutes(){
@@ -301,11 +350,15 @@ function wibMinutes(){
 }
 function updateSchedHint(){
   const el = $('schedHint'); if (!el) return;
-  if (curAutoSrc() === 'threshold'){ el.textContent = 'Jadwal nonaktif — mode suhu aktif.'; return; }
-  const s = SCS.hmToMin(CFG.schedStart), now = wibMinutes();
-  if (!isFinite(s)){ el.textContent = 'Format jam salah.'; return; }
-  if (SCS.scheduleActive(now, s, CFG.schedDur)) el.textContent = `Jadwal BERJALAN (tiap ${CFG.schedStart}, ${CFG.schedDur} mnt). Threshold nonaktif.`;
-  else el.textContent = `Jadwal aktif: ${now < s ? 'hari ini' : 'besok'} ${CFG.schedStart} WIB, selama ${CFG.schedDur} mnt. Threshold nonaktif.`;
+  if (curAutoSrc() === 'threshold'){ el.textContent = ''; el.style.display = 'none'; return; }
+  el.style.display = '';
+  const slots = schedSlots();
+  if (!slots.length){ el.textContent = 'Belum ada jadwal — tambah minimal 1.'; return; }
+  const now = wibMinutes();
+  const run = SCS.anyScheduleActive(now, slots);
+  const nx = SCS.nextSchedule(now, slots);
+  const daftar = slots.map((s) => `${s.start} (${s.dur} mnt)`).join(', ');
+  el.textContent = `${slots.length}× sehari: ${daftar}. ` + (run ? 'SEDANG BERJALAN 💦' : (nx && nx.delta > 0 ? `Berikutnya ${nx.start} WIB.` : ''));
 }
 let fbTries = 0;
 // fbStatus hanya tampil saat belum live (sim/error) biar tampilan clean.
@@ -364,13 +417,22 @@ $('btnSaveCfg').onclick = ()=>{
   CFG.hysteresis = parseFloat($('inHyst').value)||1;
   CFG.maxDuration = parseInt($('inMaxDur').value)||120;
   CFG.cooldown = parseInt($('inCooldown').value)||60;
-  CFG.schedStart = $('inSchedStart').value || '12:00';
-  CFG.schedDur = Math.min(180, Math.max(1, parseInt($('inSchedDur').value)||10));
+  CFG.schedules = readSchedList();
   saveCfg(); syncButtons(); renderSensors(); drawChart();
+  const slots = schedSlots();
   pushEvent(CFG.autoSrc === 'schedule'
-    ? `Pengaturan disimpan: mode JADWAL ${CFG.schedStart} +${CFG.schedDur} mnt`
+    ? `Pengaturan disimpan: mode JADWAL ${slots.length}× (${slots.map((s)=>s.start+' +'+s.dur+'mnt').join(', ')})`
     : `Pengaturan disimpan: mode SUHU threshold ${CFG.threshold}°C, hyst ${CFG.hysteresis}°C`);
   fbPushControl();
+};
+$('btnAddSched').onclick = ()=>{
+  const cur = readSchedList();
+  if (cur.length >= 6) return;
+  const last = cur.length ? SCS.hmToMin(cur[cur.length - 1].start) : 8 * 60;
+  const h = String(Math.floor(((isFinite(last) ? last : 480) + 60) % 1440 / 60)).padStart(2, '0');
+  const m = String(((isFinite(last) ? last : 480) + 60) % 60).padStart(2, '0');
+  CFG.schedules = [...cur, { start: `${h}:${m}`, dur: 10 }];
+  saveCfg(); syncButtons();
 };
 
 // ---------- INIT (sumber tunggal: Firebase) ----------
