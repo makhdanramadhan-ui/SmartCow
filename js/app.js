@@ -283,8 +283,8 @@ function renderSchedList(){
       <div class="sched-groups">
         <button class="pick-btn" data-pick="date" data-i="${i}" data-pop-anchor ${locked ? 'disabled' : ''} title="Pilih tanggal"><span class="pick-ico">📅</span><span>${f || s.date}</span></button>
         <button class="pick-btn" data-pick="time" data-i="${i}" data-pop-anchor ${locked ? 'disabled' : ''} title="Pilih jam (24 jam)"><span class="pick-ico">🕐</span><span>${s.start}</span></button>
-        <div class="sched-group"><span>Nyala</span><div class="sched-inline">
-          <input type="number" data-dur="${i}" step="1" min="1" max="180" value="${s.dur}" title="Lama nyala (menit)" ${locked ? 'disabled' : ''} /><i>mnt</i>
+        <div class="sched-group"><span>Lama waktu semprotan nyala</span><div class="sched-inline step">
+          <button data-dec="${i}" title="Kurangi 1 menit" ${locked ? 'disabled' : ''}>−</button><b data-durv="${i}">${s.dur}</b><button data-inc="${i}" title="Tambah 1 menit" ${locked ? 'disabled' : ''}>+</button><i>mnt</i>
         </div></div>
       </div>
       <button class="btn red small sched-del" data-del="${i}" title="Hapus jadwal ini" ${locked ? 'disabled' : ''}>✕</button>`;
@@ -293,14 +293,31 @@ function renderSchedList(){
   box.querySelectorAll('[data-pick]').forEach((b) => {
     b.onclick = (e) => { e.stopPropagation(); openSlotPicker(b); };
   });
-  box.querySelectorAll('[data-dur]').forEach((el) => {
-    el.onchange = () => {
-      const arr = [...schedSlots()];
-      const v = Math.min(180, Math.max(1, parseInt(el.value) || 0));
-      if (v > 0 && arr[+el.dataset.dur]){ arr[+el.dataset.dur].dur = v; CFG.schedules = arr; saveCfg(); }
-      syncButtons();
+  function stepDur(i, d){
+    const arr = [...schedSlots()];
+    if (!arr[i]) return;
+    arr[i].dur = Math.min(180, Math.max(1, arr[i].dur + d));
+    CFG.schedules = arr; saveCfg();
+    const b = box.querySelector(`[data-durv="${i}"]`);
+    if (b) b.textContent = arr[i].dur;
+    updateSchedHint(); updateModeInfo();
+  }
+  function holdStep(btn, fn){
+    const start = (e) => {
+      e.preventDefault();
+      fn();
+      const t1 = setTimeout(() => {
+        const iv = setInterval(fn, 80);
+        btn._stop = () => { clearTimeout(t1); clearInterval(iv); };
+      }, 400);
+      btn._t1 = t1;
     };
-  });
+    const stop = () => { clearTimeout(btn._t1); if (btn._stop) btn._stop(); fbPushControl(); };
+    btn.addEventListener('pointerdown', start);
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => btn.addEventListener(ev, stop));
+  }
+  box.querySelectorAll('[data-inc]').forEach((b) => holdStep(b, () => stepDur(+b.dataset.inc, 1)));
+  box.querySelectorAll('[data-dec]').forEach((b) => holdStep(b, () => stepDur(+b.dataset.dec, -1)));
   box.querySelectorAll('[data-del]').forEach((btn) => {
     btn.onclick = () => {
       const cur = readSchedList(true);
@@ -516,6 +533,7 @@ function syncButtons(){
   $('schedGroup').style.display = isThresh ? 'none' : '';
   renderSchedList();
   updateSchedHint();
+  updateModeInfo();
 }
 $('btnAuto').onclick = ()=>{ CFG.mode='auto'; saveCfg(); syncButtons(); pushEvent('Mode → OTOMATIS'); fbPushControl(); };
 $('btnManual').onclick = ()=>{ CFG.mode='manual'; saveCfg(); syncButtons(); pushEvent('Mode → MANUAL'); fbPushControl(); };
@@ -530,6 +548,29 @@ function fbPushControl(){
     if (slots.length){ ctl.schStart = slots[0].start; ctl.schDur = slots[0].dur; }
     SCSFirebase.pushControl(ctl);
   }
+}
+// Info kecil: lagi pake mode apa + ringkasannya.
+function updateModeInfo(){
+  const el = $('modeInfo'); if (!el) return;
+  if (CFG.mode !== 'auto'){
+    el.textContent = '🔴 Semprotan dalam mode MANUAL — pakai tombol Nyalakan / Matikan di atas.';
+    return;
+  }
+  if (curAutoSrc() === 'threshold'){
+    el.textContent = `🌡️ Semprotan akan menyala selama ${CFG.maxDuration} detik dan cooldown selama ${CFG.cooldown} detik ketika suhu menyentuh angka ${(+CFG.threshold).toFixed(1)}°C.`;
+    return;
+  }
+  const now = Date.now(), today = SCS.wibDateStr();
+  const slots = schedSlots();
+  const todayLeft = slots.filter((s) => s.date === today && SCS.slotState(s, now) !== 'past');
+  if (todayLeft.length){
+    el.textContent = `🗓️ Semprotan dijadwalkan menyala hari ini pada ${todayLeft.map((s) => `${s.start} (${s.dur} mnt)`).join(', ')}.`;
+    return;
+  }
+  const nx = SCS.nextSchedule(now, slots);
+  el.textContent = nx
+    ? `🗓️ Tidak ada jadwal tersisa hari ini. Berikutnya ${SCS.formatIDSlot(nx)}.`
+    : '🗓️ Belum ada jadwal — klik ＋ Tambah.';
 }
 function updateSchedHint(){
   const el = $('schedHint'); if (!el) return;
@@ -638,7 +679,7 @@ applyTheme(curTheme());
 $('themeBtn').onclick = ()=> applyTheme(curTheme() === 'light' ? 'dark' : 'light');
 buildGrid(6); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
 fbConnect();
-setInterval(updateSchedHint, 30000);
+setInterval(() => { updateSchedHint(); updateModeInfo(); }, 30000);
 // Auto-prune berkala: slot kedaluwarsa hilang sendiri walau halaman dibiarkan terbuka.
 // Hanya jalan bila user tidak sedang mengetik (biar tidak ganggu edit) + mode jadwal aktif.
 setInterval(() => {
