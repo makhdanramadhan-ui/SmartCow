@@ -131,6 +131,14 @@ test('wibDateTimeMs: konversi WIB ke epoch', () => {
   assert.equal(SCS.wibDateTimeMs('2026-09-25', '20:50'), Date.UTC(2026, 8, 25, 13, 50));
   assert.ok(!isFinite(SCS.wibDateTimeMs('xx', '20:50')));
 });
+
+test('format tanggal Indo + tolak tanggal tak nyata', () => {
+  assert.equal(SCS.formatIDDate('2026-09-25'), 'Jum, 25 Sep 2026');
+  assert.equal(SCS.formatIDDate('2026-09-26'), 'Sab, 26 Sep 2026');
+  assert.equal(SCS.formatIDDate('2026-02-31'), null); // 31 Feb tidak ada
+  assert.equal(SCS.formatIDDate('xx'), null);
+  assert.equal(SCS.formatIDSlot({ date: '2026-09-25', start: '21:00', dur: 10 }), 'Jum 25 Sep • 21:00 (10 mnt)');
+});
 test('jumlah kartu tampil ikut sensor terdeteksi', () => {
   assert.equal(SCS.visibleCount(null), null);
   assert.equal(SCS.visibleCount(6), 6);

@@ -75,7 +75,7 @@
       if (!s || typeof s.start !== 'string' || !isFinite(hmToMin(s.start))) return;
       let date = s.date || '';
       if (!date) { if (!todayStr) return; date = todayStr; } // slot lama tanpa tanggal -> hari ini
-      else if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;    // tanggal rusak -> buang
+      else if (!idDateParts(date)) return;                   // tanggal rusak/tak nyata -> buang
       const dur = Math.min(180, Math.max(1, Math.round(+s.dur || 0)));
       if (!(dur > 0)) return;
       if (!out.some((o) => o.date === date && o.start === s.start)) out.push({ date, start: s.start, dur });
@@ -123,10 +123,31 @@
   function prunePastSlots(slots, nowMs) {
     return (slots || []).filter((s) => slotState(s, nowMs) !== 'past');
   }
+  // Format Indonesia: 'YYYY-MM-DD' -> 'Jum, 25 Sep 2026'. null bila tanggal tak nyata (mis. 31 Feb).
+  const ID_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const ID_DAYS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  function idDateParts(dateStr) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+    if (!m) return null;
+    const t = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+    const d = new Date(t);
+    if (d.getUTCFullYear() !== +m[1] || d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3]) return null;
+    return { y: +m[1], mo: +m[2], d: +m[3], wd: ID_DAYS[d.getUTCDay()], mon: ID_MONTHS[+m[2] - 1] };
+  }
+  function formatIDDate(dateStr) {
+    const p = idDateParts(dateStr);
+    return p ? `${p.wd}, ${p.d} ${p.mon} ${p.y}` : null;
+  }
+  // 'Jum 25 Sep • 21:00 (10 mnt)' — buat rekap/hint.
+  function formatIDSlot(s) {
+    const p = idDateParts(s.date);
+    const day = p ? `${p.wd} ${p.d} ${p.mon}` : s.date;
+    return `${day} • ${s.start} (${s.dur} mnt)`;
+  }
   function logToCsv(r, threshold) {
     const w = new Date(r.t).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
     const st = r.avg >= threshold ? 'PANAS' : 'NORMAL';
     return `"${w}",${r.s.join(',')},${r.avg},${st},${r.spray ? 'ON' : 'OFF'}`;
   }
-  return { decideSprinkler, decideAuto, autoSrcOf, classify, avgOf, pruneLogs, logToCsv, hmToMin, scheduleActive, schedulesOf, anyScheduleActive, nextSchedule, prunePastSlots, slotState, wibDateStr, wibDateTimeMs, sensorTitle, visibleCount };
+  return { decideSprinkler, decideAuto, autoSrcOf, classify, avgOf, pruneLogs, logToCsv, hmToMin, scheduleActive, schedulesOf, anyScheduleActive, nextSchedule, prunePastSlots, slotState, wibDateStr, wibDateTimeMs, formatIDDate, formatIDSlot, sensorTitle, visibleCount };
 });

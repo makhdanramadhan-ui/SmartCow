@@ -90,9 +90,19 @@ body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-grad
 #schedList{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
 .sched-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#0b142c;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .sched-num{font-weight:800;color:var(--muted);text-align:center;min-width:20px}
-.sched-row input[type="date"]{flex:1.3;min-width:130px}
-.sched-row input[type="time"]{flex:1;min-width:96px}
-.sched-row input[type="number"]{width:70px;flex:none}
+.sched-groups{display:flex;gap:10px;flex:1;flex-wrap:wrap}
+.sched-group{display:flex;flex-direction:column;gap:4px}
+.sched-group>span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.sched-inline{display:flex;gap:4px;align-items:center;background:#0b142c;border:1px solid var(--line);border-radius:10px;padding:6px 8px}
+.sched-inline input{background:transparent;border:none;outline:none;color:var(--txt);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;text-align:center;color-scheme:dark}
+.sched-inline input[data-k="yyyy"]{width:52px}
+.sched-inline input[data-k="dd"],.sched-inline input[data-k="mm"],.sched-inline input[data-k="hh"],.sched-inline input[data-k="mi"]{width:30px}
+.sched-inline input[data-k="dur"]{width:44px}
+.sched-inline i{font-style:normal;color:var(--muted);font-weight:700}
+.sched-inline input::-webkit-outer-spin-button,.sched-inline input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.sched-inline input[type="number"]{-moz-appearance:textfield;appearance:textfield}
+.sched-del{flex:none}
+[data-theme="light"] .sched-inline{background:#fff;color-scheme:light}
 .sched-row input{background:#0b142c;border:1px solid var(--line);color:var(--txt);padding:8px;border-radius:8px;font-size:14px;width:100%;color-scheme:dark}
 [data-theme="light"] .sched-row,[data-theme="light"] .sched-row input{background:#fff;color-scheme:light}
 .auto-src{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}

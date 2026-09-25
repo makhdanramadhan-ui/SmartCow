@@ -137,7 +137,7 @@ function autoControl(avg){
       if (curAutoSrc() === 'schedule'){
         const act = schedActiveNow();
         const slots = schedSlots();
-        const daftar = slots.map((s) => `${shortDate(s.date)} ${s.start}`).join(', ');
+        const daftar = slots.map((s) => SCS.formatIDSlot(s)).join(', ');
         $('sprinklerReason').textContent = act
           ? `Rekomendasi: NYALA (jadwal ${daftar}). ESP mengeksekusi.`
           : `Standby jadwal (${slots.length}×: ${daftar}).`;
@@ -264,29 +264,36 @@ function schedSlots(){ return SCS.schedulesOf(CFG, SCS.wibDateStr()); }
 function schedActiveNow(){
   return SCS.anyScheduleActive(Date.now(), schedSlots());
 }
-// "HH:MM" WIB untuk nowMs (buat batas min input jam hari ini).
-function wibHM(nowMs){
-  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(nowMs));
-  const g = (t) => p.find((x) => x.type === t).value;
-  return `${g('hour')}:${g('minute')}`;
-}
-function shortDate(d){ const p = (d || '').split('-'); return p.length === 3 ? `${p[2]}-${p[1]}` : d; }
+function pad2(n){ return String(n).padStart(2, '0'); }
+function splitISO(dateStr){ const p = (dateStr || '').split('-'); return { y: p[0] || '', m: p[1] || '', d: p[2] || '' }; }
+function splitHM(hm){ const p = (hm || '').split(':'); return { h: p[0] || '', mi: p[1] || '' }; }
 // ---------- EDITOR DAFTAR JADWAL (maks 6 slot bertanggal) ----------
 // Aturan: tanggal bebas (min hari ini). Khusus hari ini, jam min = sekarang+1 mnt.
 function renderSchedList(){
   const box = $('schedList'); if (!box) return;
   const locked = CFG.mode !== 'auto';
-  const today = SCS.wibDateStr(), minTime = wibHM(Date.now() + 60000);
   box.innerHTML = '';
-  schedSlots().forEach((s, i) => {
+  const slots = schedSlots();
+  if (!slots.length){
+    box.innerHTML = '<div class="hint" style="padding:4px 2px">Belum ada jadwal — klik ＋ Tambah.</div>';
+  }
+  slots.forEach((s, i) => {
+    const dd = splitISO(s.date), tt = splitHM(s.start);
     const row = document.createElement('div');
     row.className = 'sched-row';
     row.innerHTML = `<span class="sched-num">${i + 1}</span>
-      <input type="date" data-k="date" value="${s.date}" min="${today}" ${locked ? 'disabled' : ''} />
-      <input type="time" data-k="start" value="${s.start}" ${s.date === today ? `min="${minTime}"` : ''} ${locked ? 'disabled' : ''} />
-      <input type="number" data-k="dur" step="1" min="1" max="180" value="${s.dur}" title="Lama nyala (menit)" ${locked ? 'disabled' : ''} />
-      <span class="hint">mnt</span>
-      <button class="btn red small" data-del="${i}" title="Hapus jadwal ini" ${locked ? 'disabled' : ''}>✕</button>`;
+      <div class="sched-groups">
+        <div class="sched-group"><span>Tanggal</span><div class="sched-inline">
+          <input type="number" data-k="dd" value="${+dd.d}" min="1" max="31" title="Tanggal" ${locked ? 'disabled' : ''} />/<input type="number" data-k="mm" value="${+dd.m}" min="1" max="12" title="Bulan" ${locked ? 'disabled' : ''} />/<input type="number" data-k="yyyy" value="${dd.y}" min="2026" max="2030" title="Tahun" ${locked ? 'disabled' : ''} />
+        </div></div>
+        <div class="sched-group"><span>Jam (24)</span><div class="sched-inline">
+          <input type="number" data-k="hh" value="${tt.h}" min="0" max="23" title="Jam 0-23" ${locked ? 'disabled' : ''} />:<input type="number" data-k="mi" value="${tt.mi}" min="0" max="59" title="Menit" ${locked ? 'disabled' : ''} />
+        </div></div>
+        <div class="sched-group"><span>Nyala</span><div class="sched-inline">
+          <input type="number" data-k="dur" step="1" min="1" max="180" value="${s.dur}" title="Lama nyala (menit)" ${locked ? 'disabled' : ''} /><i>mnt</i>
+        </div></div>
+      </div>
+      <button class="btn red small sched-del" data-del="${i}" title="Hapus jadwal ini" ${locked ? 'disabled' : ''}>✕</button>`;
     box.appendChild(row);
   });
   box.querySelectorAll('input').forEach((el) => {
@@ -296,29 +303,37 @@ function renderSchedList(){
     btn.onclick = () => {
       const cur = readSchedList(true);
       cur.splice(+btn.dataset.del, 1);
-      CFG.schedules = cur.length ? cur : defaultSchedules();
-      saveCfg(); syncButtons(); pushEvent('Jadwal dihapus, sisa ' + CFG.schedules.length + '×'); fbPushControl();
+      CFG.schedules = cur; // boleh kosong, tidak respawn
+      saveCfg(); syncButtons();
+      pushEvent(cur.length ? 'Jadwal dihapus, sisa ' + cur.length + '×' : 'Semua jadwal dihapus');
+      fbPushControl();
     };
   });
   const add = $('btnAddSched'); if (add) add.disabled = CFG.mode !== 'auto' || schedSlots().length >= 6;
 }
 function readSchedList(keepPast){
   const box = $('schedList'); if (!box) return schedSlots();
-  const now = Date.now();
+  const now = Date.now(), today = SCS.wibDateStr();
   const rows = [...box.querySelectorAll('.sched-row')];
   const out = [];
   rows.forEach((row) => {
-    const date = row.querySelector('[data-k="date"]').value || '';
-    const st = row.querySelector('[data-k="start"]').value || '';
-    const du = Math.min(180, Math.max(1, parseInt(row.querySelector('[data-k="dur"]').value) || 10));
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !isFinite(SCS.hmToMin(st))) return;
+    const g = (k) => (((row.querySelector('[data-k="' + k + '"]') || {}).value) || '').trim();
+    const dd = Math.round(+g('dd') || 0), mm = Math.round(+g('mm') || 0), yy = Math.round(+g('yyyy') || 0);
+    const hh = Math.round(+g('hh') || 0), mi = Math.round(+g('mi') || 0);
+    const du = Math.min(180, Math.max(1, parseInt(g('dur')) || 10));
+    if (!(yy >= 2026 && yy <= 2030 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31)) return;
+    if (!(hh >= 0 && hh <= 23 && mi >= 0 && mi <= 59)) return;
+    const date = yy + '-' + pad2(mm) + '-' + pad2(dd);
+    if (!SCS.formatIDDate(date)) return; // tanggal tak nyata (mis. 31 Feb) -> buang
+    if (date < today) return; // masa lalu -> buang
+    const st = pad2(hh) + ':' + pad2(mi);
     if (out.some((s) => s.date === date && s.start === st)) return;
     const slot = { date, start: st, dur: du };
     if (!keepPast && SCS.slotState(slot, now) === 'past') return; // yang sudah lewat dibuang
     out.push(slot);
   });
   out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : SCS.hmToMin(a.start) - SCS.hmToMin(b.start)));
-  return out.length ? out.slice(0, 6) : defaultSchedules();
+  return out.slice(0, 6); // boleh kosong
 }
 function syncButtons(){
   $('btnAuto').classList.toggle('active', CFG.mode==='auto');
@@ -358,10 +373,6 @@ function fbPushControl(){
     SCSFirebase.pushControl(ctl);
   }
 }
-function wibMinutes(){
-  const p = new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',hour:'numeric',minute:'numeric',hour12:false}).formatToParts(new Date());
-  return (+p.find(x=>x.type==='hour').value) * 60 + (+p.find(x=>x.type==='minute').value);
-}
 function updateSchedHint(){
   const el = $('schedHint'); if (!el) return;
   if (curAutoSrc() === 'threshold'){ el.textContent = ''; el.style.display = 'none'; return; }
@@ -371,8 +382,8 @@ function updateSchedHint(){
   const now = Date.now();
   const run = SCS.anyScheduleActive(now, slots);
   const nx = SCS.nextSchedule(now, slots);
-  const daftar = slots.map((s) => `${shortDate(s.date)} ${s.start} (${s.dur} mnt)`).join(', ');
-  el.textContent = `${slots.length}×: ${daftar}. ` + (run ? 'SEDANG BERJALAN 💦' : (nx ? `Berikutnya ${shortDate(nx.date)} ${nx.start} WIB.` : ''));
+  const daftar = slots.map((s) => SCS.formatIDSlot(s)).join(', ');
+  el.textContent = `${slots.length}×: ${daftar}. ` + (run ? 'SEDANG BERJALAN 💦' : (nx ? `Berikutnya ${SCS.formatIDSlot(nx)}.` : ''));
 }
 let fbTries = 0;
 // fbStatus hanya tampil saat belum live (sim/error) biar tampilan clean.
@@ -435,23 +446,31 @@ $('btnSaveCfg').onclick = ()=>{
   saveCfg(); syncButtons(); renderSensors(); drawChart();
   const slots = schedSlots();
   pushEvent(CFG.autoSrc === 'schedule'
-    ? `Pengaturan disimpan: mode JADWAL ${slots.length}× (${slots.map((s)=>shortDate(s.date)+' '+s.start+' +'+s.dur+'mnt').join(', ')})`
+    ? `Pengaturan disimpan: mode JADWAL ${slots.length}× (${slots.map((s)=>SCS.formatIDSlot(s)).join(', ')})`
     : `Pengaturan disimpan: mode SUHU threshold ${CFG.threshold}°C, hyst ${CFG.hysteresis}°C`);
   fbPushControl();
 };
 $('btnAddSched').onclick = ()=>{
   const cur = readSchedList(true);
   if (cur.length >= 6) return;
-  // Slot baru = 60 mnt setelah slot terakhir; lewat tengah malam -> tanggal maju 1 hari.
-  const last = cur[cur.length - 1];
-  const h = SCS.hmToMin(last.start);
-  const nh = isFinite(h) ? (h + 60) % 1440 : 9 * 60;
-  let ndate = last.date;
-  if (isFinite(h) && nh <= h){
-    const p = last.date.split('-').map(Number);
+  let ndate, ns;
+  if (!cur.length){
+    // Daftar kosong -> besok 09:00 (bebas diubah).
+    const t = SCS.wibDateStr(), p = t.split('-').map(Number);
     ndate = new Date(Date.UTC(p[0], p[1] - 1, p[2]) + 86400000).toISOString().slice(0, 10);
+    ns = '09:00';
+  } else {
+    // Slot baru = 60 mnt setelah slot terakhir; lewat tengah malam -> tanggal maju 1 hari.
+    const last = cur[cur.length - 1];
+    const h = SCS.hmToMin(last.start);
+    const nh = isFinite(h) ? (h + 60) % 1440 : 9 * 60;
+    ndate = last.date;
+    if (isFinite(h) && nh <= h){
+      const p = last.date.split('-').map(Number);
+      ndate = new Date(Date.UTC(p[0], p[1] - 1, p[2]) + 86400000).toISOString().slice(0, 10);
+    }
+    ns = `${String(Math.floor(nh / 60)).padStart(2, '0')}:${String(nh % 60).padStart(2, '0')}`;
   }
-  const ns = `${String(Math.floor(nh / 60)).padStart(2, '0')}:${String(nh % 60).padStart(2, '0')}`;
   CFG.schedules = [...cur, { date: ndate, start: ns, dur: 10 }];
   saveCfg(); syncButtons();
 };
@@ -462,3 +481,15 @@ $('themeBtn').onclick = ()=> applyTheme(curTheme() === 'light' ? 'dark' : 'light
 buildGrid(6); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
 fbConnect();
 setInterval(updateSchedHint, 30000);
+// Auto-prune berkala: slot kedaluwarsa hilang sendiri walau halaman dibiarkan terbuka.
+// Hanya jalan bila user tidak sedang mengetik (biar tidak ganggu edit) + mode jadwal aktif.
+setInterval(() => {
+  if (curAutoSrc() !== 'schedule') return;
+  const ae = document.activeElement;
+  if (ae && ae.tagName === 'INPUT') return;
+  const fresh = SCS.prunePastSlots(schedSlots(), Date.now());
+  if (fresh.length !== schedSlots().length){
+    CFG.schedules = fresh;
+    saveCfg(); syncButtons(); fbPushControl();
+  }
+}, 30000);
