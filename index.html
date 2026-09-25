@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Smart Cow Sprinkler System</title>
-<link rel="stylesheet" href="css/style.css?v=15" />
+<link rel="stylesheet" href="css/style.css?v=16" />
 </head>
 <body>
 <div class="bg-decor"></div>
@@ -167,31 +167,20 @@
     </div>
   </section>
 
-  <!-- EVENT + INFO -->
-  <section class="grid grid-2">
+  <!-- EVENT -->
+  <section>
     <div class="card">
       <h3>🔔 Event Sprinkler</h3>
       <ul id="eventList" class="events"><li class="hint">Belum ada event.</li></ul>
-    </div>
-    <div class="card">
-      <h3>🔌 Skema &amp; Integrasi ESP32</h3>
-      <ol class="steps">
-        <li>6× DS18B20 <b>satu bus OneWire di GPIO4</b> (DQ gabung, pull-up 4.7kΩ ke 3V3, power eksternal 3V3, bukan parasite).</li>
-        <li>GPIO <code>D23</code> → SSR IN → Solenoid Valve (AC 220V via steker, sudah disediakan mitra).</li>
-        <li>Flash <code>firmware/smart-cow-sprinkler-firebase.ino</code> dari Arduino IDE, isi WiFi + URL DB + Database Secret di bagian atas file.</li>
-        <li>ESP32 kirim telemetri tiap 2 dtk ke <code>devices/cow-sprinkler-01/telemetry/latest</code>, baca perintah dari <code>.../control</code>.</li>
-        <li>Buka web yang sudah deploy, datanya mengalir otomatis. Perintah dari web (mode, threshold, jadwal, manual) dibaca ESP32 tiap 5 dtk.</li>
-      </ol>
-      <div class="hint">Detail lengkap + wiring ada di <code>README.md</code>. Web butuh ESP32 online untuk menampilkan data.</div>
     </div>
   </section>
 
 </main>
 
-<footer>Smart Cow Sprinkler • Semester 5 • Web Projek IoT • Firebase Realtime • ESP32 • DS18B20</footer>
-<script src="js/core.js?v=15"></script>
-<script src="js/config.js?v=15"></script>
-<script src="js/firebase-config.js?v=15"></script>
+<footer>Smart Cow Sprinkler System</footer>
+<script src="js/core.js?v=16"></script>
+<script src="js/config.js?v=16"></script>
+<script src="js/firebase-config.js?v=16"></script>
 <script>
 window.addEventListener('error', function (e) {
   if (!window.SCSFirebase && e.message && e.message !== 'Script error.') {
@@ -200,7 +189,7 @@ window.addEventListener('error', function (e) {
   }
 }, true);
 </script>
-<script type="module" src="js/firebase.js?v=15"></script>
-<script src="js/app.js?v=15"></script>
+<script type="module" src="js/firebase.js?v=16"></script>
+<script src="js/app.js?v=16"></script>
 </body>
 </html>
