@@ -91,8 +91,9 @@ body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-grad
 .sidebar{position:fixed;top:0;left:0;bottom:0;width:264px;z-index:71;background:var(--card);border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:8px;transform:translateX(-105%);transition:transform .25s ease;box-shadow:20px 0 60px #0008}
 .sidebar.open{transform:none}
 .side-head{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:16px;margin-bottom:8px}
-.side-head button{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:9px;width:30px;height:30px;cursor:pointer}
+.side-head button{background:transparent;border:1px solid var(--line);color:var(--txt);border-radius:12px;width:44px;height:44px;font-size:18px;cursor:pointer;flex:none;touch-action:manipulation}
 .side-head button:hover{border-color:var(--blue)}
+.side-head button:active{background:var(--blue);color:#fff}
 .side-link{display:flex;gap:10px;align-items:center;background:transparent;border:1px solid transparent;color:var(--txt);border-radius:12px;padding:12px 14px;font-size:14px;font-weight:700;cursor:pointer;text-align:left}
 .side-link:hover{border-color:var(--line)}
 .side-link.active{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 4px 16px #3b82f655}

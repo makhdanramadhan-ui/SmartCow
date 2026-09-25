@@ -286,6 +286,19 @@ function schedActiveNow(){
   return SCS.anyScheduleActive(Date.now(), schedSlots());
 }
 function pad2(n){ return String(n).padStart(2, '0'); }
+// "HH:MM" WIB untuk nowMs+offset (batas bawah jam hari ini).
+function wibHMplus(offsetMs){
+  const t = new Date(Date.now() + (offsetMs || 0));
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(t);
+  const g = (x) => p.find((y) => y.type === x).value;
+  return `${pad2((+g('hour')) % 24)}:${g('minute')}`;
+}
+// Kalau tanggal = hari ini, jam otomatis naik ke sekarang+1 mnt (min). Besok/besoknya bebas.
+function clampToday(iso, hm){
+  if (iso !== SCS.wibDateStr()) return hm;
+  const min = wibHMplus(60000);
+  return hm < min ? min : hm;
+}
 // ---------- EDITOR DAFTAR JADWAL (maks 6 slot bertanggal) ----------
 // Aturan: tanggal bebas (min hari ini). Khusus hari ini, jam min = sekarang+1 mnt.
 function renderSchedList(){
@@ -459,7 +472,8 @@ function openDatePop(btn, i, s){
       b.onclick = () => {
         const arr = [...schedSlots()];
         if (!arr[i]){ closePicker(); return; }
-        arr[i] = { ...arr[i], date: b.dataset.day };
+        const day = b.dataset.day;
+        arr[i] = { ...arr[i], date: day, start: clampToday(day, arr[i].start) };
         commitSlots(arr);
         closePicker();
       };
@@ -467,7 +481,8 @@ function openDatePop(btn, i, s){
     box.querySelector('[data-today]').onclick = () => {
       const arr = [...schedSlots()];
       if (!arr[i]){ closePicker(); return; }
-      arr[i] = { ...arr[i], date: SCS.wibDateStr() };
+      const day = SCS.wibDateStr();
+      arr[i] = { ...arr[i], date: day, start: clampToday(day, arr[i].start) };
       commitSlots(arr);
       closePicker();
     };
@@ -703,17 +718,14 @@ $('btnAddSched').onclick = ()=>{
 };
 
 // ---------- SIDEBAR + HALAMAN (dashboard / log / event) ----------
-function openSide(){
-  $('sidebar').classList.add('open');
-  $('sidebar').setAttribute('aria-hidden', 'false');
-  $('sideOverlay').hidden = false;
-}
-function closeSide(){
+function setSide(open){
   const sb = $('sidebar'); if (!sb) return;
-  sb.classList.remove('open');
-  sb.setAttribute('aria-hidden', 'true');
-  $('sideOverlay').hidden = true;
+  sb.classList.toggle('open', !!open);
+  sb.setAttribute('aria-hidden', open ? 'false' : 'true');
+  const ov = $('sideOverlay'); if (ov) ov.hidden = !open;
 }
+function openSide(){ setSide(true); }
+function closeSide(){ setSide(false); }
 function showPage(p){
   if (p !== 'log' && p !== 'event') p = 'dash';
   document.querySelectorAll('main.container > section').forEach((s) => {
@@ -728,9 +740,13 @@ function showPage(p){
 // ---------- INIT (sumber tunggal: Firebase) ----------
 applyTheme(curTheme());
 $('themeBtn').onclick = ()=> applyTheme(curTheme() === 'light' ? 'dark' : 'light');
-$('menuBtn').onclick = openSide;
-$('sideClose').onclick = closeSide;
-$('sideOverlay').onclick = closeSide;
+$('menuBtn').addEventListener('click', openSide);
+$('sideClose').addEventListener('click', (e) => { e.stopPropagation(); closeSide(); });
+$('sideOverlay').addEventListener('click', closeSide);
+// Pengaman lapis dua: delegasi klik untuk tombol tutup (kalau wiring langsung terlewat).
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.closest && e.target.closest('#sideClose')) closeSide();
+});
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape'){ closeSide(); closeConfirm(false); } });
 $('confirmYes').onclick = () => closeConfirm(true);
 $('confirmNo').onclick = () => closeConfirm(false);
