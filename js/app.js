@@ -228,6 +228,7 @@ function renderLogs(){
 $('filterSensor').onchange = renderLogs;
 $('btnLogNow').onclick = ()=>{ const avg = SCS.avgOf(temps); lastLogTime = 0; addLogRow(avg); };
 $('btnClearLog').onclick = ()=>{ if(confirm('Hapus semua log?')){ logs=[]; localStorage.removeItem('scs_logs'); renderLogs(); } };
+$('btnClearEvents').onclick = ()=>{ if(confirm('Hapus semua event?')){ events=[]; localStorage.removeItem('scs_events'); renderEvents(); } };
 $('btnExport').onclick = ()=>{
   let csv = 'waktu_wib,' + Array.from({length: renderedCount}, (_,i)=>'s'+(i+1)).join(',') + ',avg,status,sprinkler\n';
   [...logs].reverse().forEach(r=>{
