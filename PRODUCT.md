@@ -28,9 +28,9 @@ Dipakai di kandang (HP, koneksi tidak selalu stabil) dan saat demo tugas semeste
 - Backend Firebase sebagai satu-satunya sumber data: Realtime Database (`devices/cow-sprinkler-01/...`) untuk telemetri 2 dtk, log 30 dtk, kontrol web-ke-ESP32, event, dan status; Hosting untuk deploy web statis. Login web pakai akun demo Email/Password; firmware pakai Database Secret (file .ino tidak disebar).
 - Jadwal semprot harian (jam mulai WIB + lama menit) yang memaksa sprinkler nyala di mode otomatis; dieksekusi ESP32 berdasar jam NTP.
 - Waktu dan log selalu zona Asia/Jakarta (WIB); log suhu tiap 30 dtk, maks 120 baris (1 jam), tersimpan di localStorage, bisa export CSV.
-- UI Bahasa Indonesia. Web statis (HTML/CSS/JS tanpa build step), harus tetap bisa dibuka langsung dari `index.html` dan jalan offline kecuali fitur MQTT.
+- UI Bahasa Indonesia. Web statis (HTML/CSS/JS tanpa build step), harus tetap bisa dibuka langsung dari `index.html` dan jalan offline kecuali fitur live Firebase (butuh internet + login akun demo).
 - Batasan fisik: solenoid AC 220V via SSR + steker mitra — keselamatan tegangan tinggi tidak ditawar.
-- Belum diputuskan: broker final untuk deployment kandang; penamaan/posisi pasti keenam titik sensor di kandang nyata.
+- Firebase sudah final sebagai backend deployment kandang. Penamaan/posisi fisik keenam titik ikut CONTEXT (depan, tengah, belakang); pemetaan ROM ke posisi via SCAN_ADDRESSES belum final.
 
 ## Brand Commitments
 
@@ -38,7 +38,7 @@ Nama: Smart Cow Sprinkler System. Bahasa: Indonesia. Satuan suhu °C, waktu WIB.
 
 ## Evidence on Hand
 
-Implementasi berjalan di `index.html` + `css/style.css` + `js/app.js` + `js/config.js`; contoh firmware ESP32 di `firmware/smart-cow-sprinkler.ino`; wiring dan cara pakai di `README.md`. Belum ada data sensor nyata, foto kandang, atau hasil uji coba — semua angka saat ini dari simulasi.
+Implementasi berjalan di `index.html` + `css/style.css` + `js/core.js` + `js/app.js` + `js/config.js` + `js/source.js` + `js/firebase.js` (contoh config di `js/firebase-config.example.js`, skrip uji di `package.json` via `npm test`, vektor keputusan di `test/decision-vectors.json`); firmware ESP32 di `firmware/smart-cow-sprinkler-firebase/smart-cow-sprinkler-firebase.ino`; wiring dan cara pakai di `README.md`. Belum ada data sensor nyata, foto kandang, atau hasil uji coba — semua angka saat ini dari simulasi.
 
 ## Product Principles
 

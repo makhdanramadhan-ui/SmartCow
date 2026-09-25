@@ -78,3 +78,14 @@ test('judul info sensor', () => {
   assert.equal(SCS.sensorTitle(0), '⚠️ Tidak ada sensor terdeteksi');
   assert.equal(SCS.sensorTitle(6), '🌡️ Sensor terdeteksi: 6');
 });
+
+test('vektor keputusan relay (kontrak firmware)', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const vectors = JSON.parse(fs.readFileSync(path.join(__dirname, 'decision-vectors.json'), 'utf8'));
+  for (const v of vectors) {
+    const avg = v.avg === null ? NaN : v.avg;
+    const got = SCS.decideRelay(avg, v.st, v.cfg, v.now, v.sched);
+    assert.deepEqual(got, v.expect, v.name);
+  }
+});
