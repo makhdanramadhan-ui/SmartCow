@@ -188,7 +188,6 @@ function drawChart(){
   };
   for(let s=0;s<renderedCount;s++) draw(s, COLORS[s]+'cc', d=>{ const v=d.s[s]; return (v == null || !isFinite(v)) ? NaN : v; });
   if ($('showAvg').checked) draw('avg', AVG_COLOR, d=>d.avg);
-  if ($('showAvg').checked) draw('avg', AVG_COLOR, d=>d.avg);
 }
 window.addEventListener('resize', drawChart);
 $('showAvg').onchange = drawChart;
@@ -196,6 +195,7 @@ $('btnClearChart').onclick = ()=>{ history=[]; localStorage.removeItem('scs_hist
 
 // ---------- LOG 1 JAM ----------
 function addLogRow(avg){
+  if (!isFinite(avg)) return; // tanpa data valid: jangan catat baris sampah
   lastLogTime = Date.now();
   const row = { t: lastLogTime, s: temps.map(v => v == null || !isFinite(v) ? null : +v.toFixed(1)), avg:+avg.toFixed(1), spray: sprinklerOn?1:0 };
   logs.unshift(row); logs = logs.slice(0,120);
@@ -212,7 +212,7 @@ function renderLogs(){
     const tr = document.createElement('tr');
     const time = new Date(r.t).toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',second:'2-digit'});
     const hot = r.avg >= CFG.threshold;
-    tr.innerHTML = `<td>${time}</td>` + r.s.slice(0, renderedCount).map(v=>(v == null || !isFinite(v))?`<td>—</td>`:`<td class="${v>=CFG.threshold?'hot':'cold'}">${v.toFixed(1)}</td>`).join('')
+    tr.innerHTML = `<td>${time}</td>` + (Array.isArray(r.s)?r.s:[]).slice(0, renderedCount).map(v=>(v == null || !isFinite(v))?`<td>—</td>`:`<td class="${v>=CFG.threshold?'hot':'cold'}">${v.toFixed(1)}</td>`).join('')
       + `<td><b>${r.avg.toFixed(1)}</b></td><td>${hot?'🔥 PANAS':'✅ OK'}</td><td>${r.spray?'💦 ON':'—'}</td>`;
     tb.appendChild(tr);
   });
