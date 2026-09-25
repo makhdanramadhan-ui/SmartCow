@@ -387,20 +387,26 @@ function openPop(anchor, key, html){
   popEl.dataset.for = key;
   popEl.innerHTML = html;
   document.body.appendChild(popEl);
-  popEl.style.visibility = 'hidden';
-  const r = anchor.getBoundingClientRect();
-  const pw = popEl.offsetWidth, ph = popEl.offsetHeight;
-  const x = Math.min(r.left, window.innerWidth - pw - 12);
-  let y = r.bottom + 6;
-  if (y + ph > window.innerHeight - 12) y = Math.max(12, r.top - ph - 6);
-  popEl.style.left = Math.max(12, x) + 'px';
-  popEl.style.top = Math.max(0, y) + 'px';
-  popEl.style.visibility = '';
+  placePop(anchor);
   document.addEventListener('pointerdown', popOutside, true);
   window.addEventListener('scroll', closePicker, true);
   window.addEventListener('resize', closePicker);
   document.addEventListener('keydown', popEsc);
   return popEl;
+}
+// Ukur ulang + posisikan popup: bawah dulu, flip ke atas kalau tidak muat (biar tidak ketutup taskbar).
+function placePop(anchor){
+  if (!popEl || !anchor) return;
+  popEl.style.visibility = 'hidden';
+  const r = anchor.getBoundingClientRect();
+  const pw = popEl.offsetWidth, ph = popEl.offsetHeight;
+  const x = Math.min(r.left, window.innerWidth - pw - 12);
+  let y = r.bottom + 6;
+  if (y + ph > window.innerHeight - 12) y = r.top - ph - 6;
+  if (y < 12) y = Math.max(12, Math.min(r.bottom + 6, window.innerHeight - ph - 12));
+  popEl.style.left = Math.max(12, x) + 'px';
+  popEl.style.top = Math.max(0, y) + 'px';
+  popEl.style.visibility = '';
 }
 const ID_MON = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 const ID_DOW = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
@@ -466,6 +472,7 @@ function openDatePop(btn, i, s){
       closePicker();
     };
     box.querySelector('[data-close]').onclick = closePicker;
+    placePop(btn); // ukur ulang setelah isi kalender ada (tinggi beda tiap bulan)
   }
   draw();
 }
