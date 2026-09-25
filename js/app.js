@@ -507,14 +507,25 @@ function openTimePop(btn, i, s){
   let mi = Math.min(59, Math.max(0, parseInt(parts[1]) || 0));
   if (hh < minH || (hh === minH && mi < minM)){ hh = minH; mi = minM; }
   const el = openPop(btn, i + '-time', `<div class="pk-time">
-      <div class="pk-col"><button data-s="h" data-d="1">▲</button><b data-v="h">${pad2(hh)}</b><button data-s="h" data-d="-1">▼</button><span>Jam</span></div>
+      <div class="pk-col"><button data-s="h" data-d="1">▲</button><input data-v="h" value="${pad2(hh)}" inputmode="numeric" maxlength="2" autocomplete="off" /><button data-s="h" data-d="-1">▼</button><span>Jam</span></div>
       <div class="pk-sep">:</div>
-      <div class="pk-col"><button data-s="m" data-d="1">▲</button><b data-v="m">${pad2(mi)}</b><button data-s="m" data-d="-1">▼</button><span>Menit</span></div>
+      <div class="pk-col"><button data-s="m" data-d="1">▲</button><input data-v="m" value="${pad2(mi)}" inputmode="numeric" maxlength="2" autocomplete="off" /><button data-s="m" data-d="-1">▼</button><span>Menit</span></div>
     </div>
     <div class="pk-foot"><span class="hint">24 jam • WIB</span><span><button data-close>Batal</button> <button data-ok class="btn blue small">OK</button></span></div>`);
   if (!el) return;
   const vH = el.querySelector('[data-v="h"]'), vM = el.querySelector('[data-v="m"]');
-  function paint(){ vH.textContent = pad2(hh); vM.textContent = pad2(mi); }
+  function paint(){ if (document.activeElement !== vH) vH.value = pad2(hh); if (document.activeElement !== vM) vM.value = pad2(mi); }
+  // Ketik langsung: cuma digit, clamp 0-23 / 0-59 + batas bawah slot hari ini.
+  function readInputs(){
+    let h = parseInt((vH.value || '').replace(/\D/g, '').slice(-2), 10);
+    let m = parseInt((vM.value || '').replace(/\D/g, '').slice(-2), 10);
+    if (!isFinite(h)) h = hh; if (!isFinite(m)) m = mi;
+    h = Math.min(23, Math.max(0, h)); m = Math.min(59, Math.max(0, m));
+    if (h < minH || (h === minH && m < minM)){ h = minH; m = minM; }
+    hh = h; mi = m; paint();
+  }
+  vH.addEventListener('change', readInputs);
+  vM.addEventListener('change', readInputs);
   function step(which, d){
     if (which === 'h'){
       hh = (hh + d + 24) % 24;
@@ -545,6 +556,7 @@ function openTimePop(btn, i, s){
   el.querySelector('[data-close]').onclick = () => { stopRep(); closePicker(); };
   el.querySelector('[data-ok]').onclick = () => {
     stopRep();
+    readInputs(); // pastikan ketikan terakhir ikut ke-commit
     const arr = [...schedSlots()];
     if (!arr[i]){ closePicker(); return; }
     arr[i] = { ...arr[i], start: pad2(hh) + ':' + pad2(mi) };
@@ -717,26 +729,54 @@ $('btnAddSched').onclick = ()=>{
   saveCfg(); syncButtons();
 };
 
-// ---------- HALAMAN (dashboard / log / event) via tab bar ----------
+// ---------- SIDEBAR DRAWER + HALAMAN (dashboard / log / event) ----------
+// Tutup DIJAMIN: selain lepas class (animasi geser), display:none paksa 300ms setelahnya.
+// Jadi sidebar tidak mungkin nyangkut terbuka apapun yang terjadi dengan CSS.
+function setSide(open){
+  var sb = $('sidebar'); if (!sb) return;
+  try { console.log('[side] setSide', open); } catch {}
+  if (open){
+    sb.style.display = '';
+    void sb.offsetWidth; // paksa reflow biar animasi geser jalan
+    sb.classList.add('open');
+  } else {
+    sb.classList.remove('open');
+    setTimeout(function(){
+      var s2 = $('sidebar');
+      if (s2 && !s2.classList.contains('open')) s2.style.display = 'none';
+    }, 300);
+  }
+  sb.setAttribute('aria-hidden', open ? 'false' : 'true');
+  var ov = $('sideOverlay'); if (ov) ov.hidden = !open;
+}
+function openSide(){ setSide(true); }
+function closeSide(){ setSide(false); }
 function showPage(p){
   if (p !== 'log' && p !== 'event') p = 'dash';
   document.querySelectorAll('main.container > section').forEach((s) => {
     s.style.display = (!s.dataset.page || s.dataset.page === p) ? '' : 'none';
   });
-  document.querySelectorAll('.tab-link').forEach((b) => b.classList.toggle('active', b.dataset.page === p));
+  document.querySelectorAll('.side-link').forEach((b) => b.classList.toggle('active', b.dataset.page === p));
   try { localStorage.setItem('scs_page', p); } catch {}
+  closeSide();
   window.scrollTo(0, 0);
   if (p === 'dash' && typeof drawChart === 'function') drawChart(); // canvas butuh redraw pas tampil lagi
 }
 // ---------- INIT (sumber tunggal: Firebase) ----------
 applyTheme(curTheme());
 $('themeBtn').onclick = ()=> applyTheme(curTheme() === 'light' ? 'dark' : 'light');
-document.querySelectorAll('.tab-link').forEach((b) => { b.addEventListener('click', () => showPage(b.dataset.page)); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape'){ closeConfirm(false); } });
+$('menuBtn').addEventListener('click', openSide);
+$('sideClose').addEventListener('click', (e) => { e.stopPropagation(); closeSide(); });
+$('sideOverlay').addEventListener('click', closeSide);
+// Pengaman lapis dua: delegasi klik untuk tombol tutup.
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.closest && e.target.closest('#sideClose')) closeSide();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape'){ closeSide(); closeConfirm(false); } });
 $('confirmYes').onclick = () => closeConfirm(true);
 $('confirmNo').onclick = () => closeConfirm(false);
 $('confirmOverlay').addEventListener('pointerdown', (e) => { if (e.target === $('confirmOverlay')) closeConfirm(false); });
-document.querySelectorAll('.tab-link').forEach((b) => { b.addEventListener('click', () => showPage(b.dataset.page)); });
+document.querySelectorAll('.side-link').forEach((b) => { b.addEventListener('click', () => showPage(b.dataset.page)); });
 buildGrid(6); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
 try { showPage(localStorage.getItem('scs_page') || 'dash'); } catch { showPage('dash'); }
 fbConnect();
