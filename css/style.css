@@ -214,3 +214,41 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 [data-theme="light"] .status-pill.bahaya{background:#fee2e2;color:#b91c1c;border-color:#fca5a5}
 [data-theme="light"] .wib-badge{background:#ccfbf1;color:#0f766e;border-color:#99f6e4}
 [data-theme="light"] .badge.live{background:#dcfce7;color:#15803d;border-color:#86efac;box-shadow:none}
+
+/* ---------- HOVER & MICRO-INTERACTIONS ---------- */
+.btn{transition:transform .15s ease,box-shadow .15s ease,filter .15s ease}
+.btn:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.12);box-shadow:0 6px 18px #0007}
+.btn:active:not(:disabled){transform:scale(.97)}
+.card{transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.card:hover{transform:translateY(-2px);border-color:#3b82f688;box-shadow:0 14px 36px #0008}
+.sensor{transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.sensor:hover{transform:translateY(-3px);border-color:var(--blue);box-shadow:0 10px 24px #3b82f644}
+tbody tr{transition:background .15s ease}
+tbody tr:hover{background:#3b82f622}
+.events li{transition:transform .15s ease,border-color .15s ease}
+.events li:hover{transform:translateX(3px);border-color:var(--blue)}
+.mode-btn{transition:transform .15s ease,box-shadow .15s ease,background .15s ease}
+.mode-btn:not(.active):hover{transform:translateY(-1px);color:var(--txt);border-color:var(--blue)}
+.mode-btn:active{transform:scale(.97)}
+.src-card{transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
+.src-card:hover{transform:translateY(-1px);border-color:var(--blue)}
+.menu-btn,.theme-btn{transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.menu-btn:hover,.theme-btn:hover{transform:scale(1.08) rotate(-6deg);border-color:var(--blue);box-shadow:0 6px 18px #3b82f655}
+.menu-btn:active,.theme-btn:active{transform:scale(.94)}
+.side-link{transition:transform .15s ease,background .15s ease}
+.side-link:hover:not(.active){transform:translateX(4px)}
+.pick-btn{transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
+.pick-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 16px #0006}
+.pick-btn:active:not(:disabled){transform:scale(.97)}
+.sched-inline.step button{transition:transform .12s ease,background .12s ease,border-color .12s ease}
+.sched-inline.step button:hover:not(:disabled){background:var(--blue);border-color:var(--blue);color:#fff}
+.sched-inline.step button:active:not(:disabled){transform:scale(.9)}
+.toolbar select{transition:border-color .15s ease}
+.toolbar select:hover{border-color:var(--blue)}
+.pk-grid button{transition:transform .12s ease,background .12s ease}
+.pk-grid button:not(:disabled):hover{transform:scale(1.12)}
+.pk-grid button:not(:disabled):active{transform:scale(.95)}
+.sprinkler{transition:box-shadow .3s ease,background .3s ease}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none !important;animation:none !important;transform:none !important}
+}
