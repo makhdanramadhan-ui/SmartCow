@@ -25,8 +25,8 @@
 #include <time.h>
 
 // ---------------- KONFIGURASI (ISI DULU) ----------------
-#define WIFI_SSID "Suratman-EXT"
-#define WIFI_PASSWORD "11223344"
+#define WIFI_SSID "GANTI_WIFI_SSID"
+#define WIFI_PASSWORD "GANTI_WIFI_PASSWORD"
 #define DATABASE_URL "https://smartcow-de25f-default-rtdb.asia-southeast1.firebasedatabase.app"
 #define DATABASE_SECRET "GANTI_DATABASE_SECRET"
 #define DEVICE_ID "cow-sprinkler-01"
@@ -54,9 +54,9 @@ int devCount = 0;
 
 char ctlMode[8] = "auto";
 char ctlManual[8] = "off";
-char ctlSchStart[8] = "12:00";
-int ctlSchDur = 10;
-bool ctlSchOn = false;
+char ctlSchedStart[8] = "12:00";
+int ctlSchedDur = 10;
+bool ctlSchedOn = false;
 bool schedWas = false;
 float ctlThreshold = 30.0, ctlHyst = 1.0;
 int ctlMaxDur = 120, ctlCooldown = 60;
@@ -159,18 +159,21 @@ float avgNow() {
 
 // true bila jadwal harian sedang dalam window (jam WIB dari NTP).
 bool schedActiveNow() {
-  if (!ctlSchOn) return false;
+  if (!ctlSchedOn) return false;
   struct tm ti;
   if (!getLocalTime(&ti)) return false;
   int h, m;
-  if (sscanf(ctlSchStart, "%d:%d", &h, &m) != 2) return false;
-  int start = h * 60 + m, cur = ti.tm_hour * 60 + ti.tm_min, dur = ctlSchDur;
+  if (sscanf(ctlSchedStart, "%d:%d", &h, &m) != 2) return false;
+  int start = h * 60 + m, cur = ti.tm_hour * 60 + ti.tm_min, dur = ctlSchedDur;
   if (dur <= 0) return false;
   if (start + dur <= 1440) return cur >= start && cur < start + dur;
   return cur >= start || cur < (start + dur) % 1440;
 }
 
 void applyLogic(float avg) {
+  // KONTRAK KEPUTUSAN: cerminkan js/core.js decideRelay + test/decision-vectors.json
+  // (threshold on, hysteresis off, cooldown gate, durasi-maks protect, overlay
+  // jadwal paksa-nyala). Ubah salah satu, ubah keduanya + tambah vektor.
   unsigned long now = millis();
   bool autoMode = strcmp(ctlMode, "auto") == 0;
   if (autoMode) {
@@ -184,11 +187,11 @@ void applyLogic(float avg) {
       setRelay(false, "protect_off", "durasi maks", avg);
     // Overlay jadwal: paksa nyala di window (lewati cooldown, perintah eksplisit),
     // matikan saat window selesai kecuali suhu masih menahan via threshold.
-    bool sch = schedActiveNow();
-    if (sch && !ssrOn) setRelay(true, "jadwal_on", "jadwal " + String(ctlSchStart), avg);
-    else if (!sch && schedWas && ssrOn && avg < ctlThreshold)
+    bool sched = schedActiveNow();
+    if (sched && !ssrOn) setRelay(true, "jadwal_on", "jadwal " + String(ctlSchedStart), avg);
+    else if (!sched && schedWas && ssrOn && avg < ctlThreshold)
       setRelay(false, "jadwal_off", "jadwal selesai", avg);
-    schedWas = sch;
+    schedWas = sched;
   } else {
     bool want = strcmp(ctlManual, "on") == 0;
     if (want && !ssrOn) setRelay(true, "manual_on", "perintah web", avg);
@@ -198,12 +201,12 @@ void applyLogic(float avg) {
 
 void sendTelemetry(float avg) {
   char buf[340];
-  bool schNow = schedActiveNow();
+  bool schedNow = schedActiveNow();
   snprintf(buf, sizeof(buf),
     "{\"t1\":%.2f,\"t2\":%.2f,\"t3\":%.2f,\"t4\":%.2f,\"t5\":%.2f,\"t6\":%.2f,"
-    "\"avg\":%.2f,\"ssr\":%d,\"sch\":%d,\"n\":%d,\"mode\":\"%s\",\"rssi\":%d,\"heap\":%u,\"ts\":{\".sv\":\"timestamp\"}}",
+    "\"avg\":%.2f,\"ssr\":%d,\"sched\":%d,\"n\":%d,\"mode\":\"%s\",\"rssi\":%d,\"heap\":%u,\"ts\":{\".sv\":\"timestamp\"}}",
     curT[0], curT[1], curT[2], curT[3], curT[4], curT[5],
-    avg, ssrOn ? 1 : 0, schNow ? 1 : 0, devCount, ctlMode, WiFi.RSSI(), (unsigned)ESP.getFreeHeap());
+    avg, ssrOn ? 1 : 0, schedNow ? 1 : 0, devCount, ctlMode, WiFi.RSSI(), (unsigned)ESP.getFreeHeap());
   if (fbPut("telemetry/latest", String(buf))) printSensors(avg);
   else Serial.println("Gagal kirim telemetri, cek WiFi/Firebase.");
 }
@@ -229,7 +232,7 @@ void pollControl() {
     char buf[280];
     snprintf(buf, sizeof(buf),
       "{\"mode\":\"auto\",\"manualSsr\":\"off\",\"threshold\":%.1f,\"hysteresis\":%.1f,"
-      "\"maxDuration\":%d,\"cooldown\":%d,\"schOn\":0,\"schStart\":\"12:00\",\"schDur\":10,"
+      "\"maxDuration\":%d,\"cooldown\":%d,\"schedOn\":0,\"schedStart\":\"12:00\",\"schedDur\":10,"
       "\"updatedBy\":\"device\"}",
       ctlThreshold, ctlHyst, ctlMaxDur, ctlCooldown);
     fbPut("control", String(buf));
@@ -241,9 +244,9 @@ void pollControl() {
   ctlHyst = jNum(js, "hysteresis", ctlHyst);
   ctlMaxDur = (int)jNum(js, "maxDuration", ctlMaxDur);
   ctlCooldown = (int)jNum(js, "cooldown", ctlCooldown);
-  ctlSchOn = jNum(js, "schOn", ctlSchOn ? 1 : 0) > 0.5;
-  jStr(js, "schStart", ctlSchStart, sizeof(ctlSchStart), "12:00");
-  ctlSchDur = (int)jNum(js, "schDur", ctlSchDur);
+  ctlSchedOn = jNum(js, "schedOn", ctlSchedOn ? 1 : 0) > 0.5;
+  jStr(js, "schedStart", ctlSchedStart, sizeof(ctlSchedStart), "12:00");
+  ctlSchedDur = (int)jNum(js, "schedDur", ctlSchedDur);
 }
 
 void printAddresses() {
