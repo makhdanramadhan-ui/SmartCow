@@ -11,22 +11,6 @@
     if (on && avg <= cfg.threshold - cfg.hysteresis) return 'off';
     return 'stay';
   }
-  // Kebijakan relay penuh: threshold + hysteresis + cooldown + durasi maks +
-  // overlay jadwal. Kontrak yang sama diimplementasi firmware (.ino applyLogic);
-  // vektor kebenaran di test/decision-vectors.json menguji varian JS ini.
-  // st: {on, sprayStart, lastSprayEnd} (waktu ms). sched: jadwal aktif.
-  function decideRelay(avg, st, cfg, now, sched) {
-    if (!isFinite(avg)) return { action: 'stay', reason: 'tanpa-data' };
-    if (sched && !st.on) return { action: 'on', reason: 'jadwal' };
-    const base = decideSprinkler(avg, st.on, cfg);
-    if (base === 'on') {
-      if ((now - (st.lastSprayEnd || 0)) / 1000 >= (cfg.cooldown || 0)) return { action: 'on', reason: 'threshold' };
-      return { action: 'stay', reason: 'cooldown' };
-    }
-    if (base === 'off') return { action: 'off', reason: 'hysteresis' };
-    if (st.on && st.sprayStart && (now - st.sprayStart) / 1000 >= cfg.maxDuration) return { action: 'off', reason: 'durasi-maks' };
-    return { action: 'stay', reason: 'stabil' };
-  }
   function classify(avg, cfg) {
     if (avg >= cfg.threshold + 1) return 'bahaya';
     if (avg >= cfg.threshold) return 'waspada';
@@ -69,5 +53,5 @@
     const st = r.avg >= threshold ? 'PANAS' : 'NORMAL';
     return `"${w}",${r.s.join(',')},${r.avg},${st},${r.spray ? 'ON' : 'OFF'}`;
   }
-  return { decideSprinkler, decideRelay, classify, avgOf, pruneLogs, logToCsv, hmToMin, scheduleActive, sensorTitle, visibleCount };
+  return { decideSprinkler, classify, avgOf, pruneLogs, logToCsv, hmToMin, scheduleActive, sensorTitle, visibleCount };
 });

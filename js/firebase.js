@@ -29,7 +29,7 @@ async function connect({ onStatus, onTelemetry, onSeedLogs }) {
   const cb = (snap) => {
     const v = snap.val();
     if (!v) { onStatus && onStatus('Terhubung, tapi ESP32 belum kirim data. Cek firmware + WiFi.', 'live'); return; }
-    onTelemetry && onTelemetry({ s: [v.t1, v.t2, v.t3, v.t4, v.t5, v.t6], avg: v.avg, ssr: v.ssr, sched: v.sched, n: v.n });
+    onTelemetry && onTelemetry({ s: [v.t1, v.t2, v.t3, v.t4, v.t5, v.t6], avg: v.avg, ssr: v.ssr, sch: v.sch, n: v.n });
   };
   onValue(latestRef, cb);
   unsubs.push(() => off(latestRef, 'value', cb));

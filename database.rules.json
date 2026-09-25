@@ -20,7 +20,7 @@
         "control": {
           ".read": "auth != null",
           ".write": "auth != null",
-          ".validate": "newData.hasChildren(['mode']) && (newData.child('mode').val() == 'auto' || newData.child('mode').val() == 'manual') && (!newData.hasChild('threshold') || newData.child('threshold').isNumber()) && (!newData.hasChild('hysteresis') || newData.child('hysteresis').isNumber()) && (!newData.hasChild('maxDuration') || newData.child('maxDuration').isNumber()) && (!newData.hasChild('cooldown') || newData.child('cooldown').isNumber()) && (!newData.hasChild('schedDur') || newData.child('schedDur').isNumber())"
+          ".validate": "newData.hasChildren(['mode']) && (newData.child('mode').val() == 'auto' || newData.child('mode').val() == 'manual')"
         },
         "events": {
           ".read": "auth != null",

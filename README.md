@@ -16,7 +16,7 @@ Web monitoring + kontrol penyemprot kandang sapi otomatis berbasis suhu (6× DS1
 
 1. Install board `esp32` (Espressif) via Boards Manager, pilih **ESP32 Dev Module**.
 2. Install via Library Manager: **OneWire** (Paul Stoffregen) + **DallasTemperature** (Miles Burton). Tidak perlu library Firebase.
-3. Buka `firmware/smart-cow-sprinkler-firebase/smart-cow-sprinkler-firebase.ino`, isi 4 nilai atas: `WIFI_SSID`, `WIFI_PASSWORD`, `DATABASE_URL`, `DATABASE_SECRET` (lihat langkah 3).
+3. Buka `firmware/smart-cow-sprinkler-firebase.ino`, isi 4 nilai atas: `WIFI_SSID`, `WIFI_PASSWORD`, `DATABASE_URL`, `DATABASE_SECRET` (lihat langkah 3).
 4. Upload, buka Serial Monitor **115200**. Harus muncul `Sensor terdeteksi: 6` + `Terkirim avg=...` tiap 2 detik.
 5. Kalau sensor kurang dari 6: cek pull-up, power 3V3, dan sambungan DQ.
 6. Untuk petakan S1..S6 ke posisi fisik: set `SCAN_ADDRESSES true` sekali, catat ROM dari Serial, kembalikan ke false.
@@ -38,11 +38,11 @@ Web monitoring + kontrol penyemprot kandang sapi otomatis berbasis suhu (6× DS1
 ## 5. Struktur data RTDB
 
 ```
-devices/cow-sprinkler-01/telemetry/latest  (ESP32 tulis tiap 2 dtk, web listen; ada flag sched)
+devices/cow-sprinkler-01/telemetry/latest  (ESP32 tulis tiap 2 dtk, web listen; ada flag sch)
 devices/cow-sprinkler-01/telemetry/log/{id} (tiap 30 dtk, web baca 120 terakhir)
 devices/cow-sprinkler-01/control            (web tulis, ESP32 baca tiap 5 dtk:
   mode, manualSsr, threshold, hysteresis, maxDuration, cooldown,
-  schedOn, schedStart "HH:MM", schedDur menit)
+  schOn, schStart "HH:MM", schDur menit)
 devices/cow-sprinkler-01/events/{id}        (bukti ON/OFF, ditulis ESP32 + web)
 devices/cow-sprinkler-01/status             (heartbeat ESP32 tiap 30 dtk)
 ```
@@ -50,10 +50,9 @@ devices/cow-sprinkler-01/status             (heartbeat ESP32 tiap 30 dtk)
 ## 6. File
 
 ```
-index.html  css/style.css  js/core.js  js/app.js  js/config.js  js/source.js
-js/firebase.js  js/firebase-config.js  test/core.test.js  test/decision-vectors.json
-package.json (`npm test`, tanpa dependencies)
-firmware/smart-cow-sprinkler-firebase/smart-cow-sprinkler-firebase.ino
+index.html  css/style.css  js/core.js  js/app.js  js/config.js
+js/firebase.js  js/firebase-config.js  test/core.test.js (node --test test/)
+firmware/smart-cow-sprinkler-firebase.ino  firmware/smart-cow-sprinkler.ino (MQTT lama)
 firebase.json  .firebaserc  database.rules.json
 docs/firebase-research.md  docs/adr/  CONTEXT.md  PRODUCT.md
 ```
