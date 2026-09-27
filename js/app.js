@@ -772,7 +772,23 @@ function closeSide(){ setSide(false); }
 function showPage(p){
   if (p !== 'log' && p !== 'event') p = 'dash';
   document.querySelectorAll('main.container > section').forEach((s) => {
-    s.style.display = (!s.dataset.page || s.dataset.page === p) ? '' : 'none';
+    var show = (!s.dataset.page || s.dataset.page === p);
+    if (show){
+      s.style.display = '';
+      // fade-in halus tiap ganti halaman (bukan blink instan)
+      s.style.opacity = '0';
+      s.style.transform = 'translateY(10px)';
+      s.style.transition = 'opacity .35s ease, transform .35s cubic-bezier(.32,.72,0,1)';
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          s.style.opacity = '1';
+          s.style.transform = 'none';
+        });
+      });
+      setTimeout(function(){ s.style.transition = ''; s.style.opacity = ''; s.style.transform = ''; }, 400);
+    } else {
+      s.style.display = 'none';
+    }
   });
   document.querySelectorAll('.side-link').forEach((b) => b.classList.toggle('active', b.dataset.page === p));
   try { localStorage.setItem('scs_page', p); } catch {}
