@@ -266,5 +266,12 @@ tbody tr:hover{background:#3b82f622}
 .pk-grid button:not(:disabled):active{transform:scale(.95)}
 .sprinkler{transition:box-shadow .3s ease,background .3s ease}
 @media (prefers-reduced-motion:reduce){
-  *,*::before,*::after{transition:none !important;animation:none !important;transform:none !important}
+  *,*::before,*::after{animation:none !important;transition-duration:.01ms !important}
+  /* Drawer fungsional JANGAN dibunuh total — tetap geser kilat 180ms biar ga blink.
+     (Yang dimatikan cuma animasi dekoratif: pulse, pageIn, hover.) */
+  .sidebar{transition:transform .18s ease-out,visibility 0s linear .18s !important}
+  .sidebar.open{transition:transform .18s ease-out !important}
+  .sidebar.open .side-link{transition-delay:0s !important}
+  .side-overlay{transition:opacity .18s ease-out,visibility 0s linear .18s !important}
+  .side-overlay.show{transition:opacity .18s ease-out !important}
 }
