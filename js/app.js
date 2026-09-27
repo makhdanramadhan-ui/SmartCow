@@ -750,24 +750,22 @@ $('btnAddSched').onclick = ()=>{
 };
 
 // ---------- SIDEBAR DRAWER + HALAMAN (dashboard / log / event) ----------
-// Tutup DIJAMIN: selain lepas class (animasi geser), display:none paksa 300ms setelahnya.
-// Jadi sidebar tidak mungkin nyangkut terbuka apapun yang terjadi dengan CSS.
+// Animasi clean: tanpa display:none (pakai visibility di CSS) biar transisi
+// geser + fade overlay jalan mulus dua arah. Body dikunci scroll pas terbuka.
 function setSide(open){
   var sb = $('sidebar'); if (!sb) return;
-  try { console.log('[side] setSide', open); } catch {}
-  if (open){
-    sb.style.display = '';
-    void sb.offsetWidth; // paksa reflow biar animasi geser jalan
-    sb.classList.add('open');
-  } else {
-    sb.classList.remove('open');
-    setTimeout(function(){
-      var s2 = $('sidebar');
-      if (s2 && !s2.classList.contains('open')) s2.style.display = 'none';
-    }, 300);
-  }
+  try { sb.style.display = ''; } catch {}
+  sb.classList.toggle('open', !!open);
   sb.setAttribute('aria-hidden', open ? 'false' : 'true');
-  var ov = $('sideOverlay'); if (ov) ov.hidden = !open;
+  var ov = $('sideOverlay');
+  if (ov){
+    if (open){ ov.hidden = false; void ov.offsetWidth; ov.classList.add('show'); }
+    else {
+      ov.classList.remove('show');
+      setTimeout(function(){ if (!$('sidebar').classList.contains('open')) ov.hidden = true; }, 340);
+    }
+  }
+  try { document.body.style.overflow = open ? 'hidden' : ''; } catch {}
 }
 function openSide(){ setSide(true); }
 function closeSide(){ setSide(false); }
