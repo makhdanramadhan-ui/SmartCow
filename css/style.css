@@ -22,6 +22,8 @@ body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-grad
 .badge.live{background:#052e1b;color:#4ade80;border-color:#166534;box-shadow:0 0 18px #22c55e55}
 .badge.err{background:#3b0a0a;color:#fca5a5;border-color:#7f1d1d}
 .container{max-width:1280px;margin:0 auto;padding:22px;display:flex;flex-direction:column;gap:20px}
+main.container > section.page-in{animation:pageIn .45s cubic-bezier(.32,.72,0,1)}
+@keyframes pageIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 .grid{display:grid;gap:16px}
 .grid-4{grid-template-columns:1.2fr 1fr 1fr 1fr}
 .grid-3{grid-template-columns:1.2fr 1fr 1fr}

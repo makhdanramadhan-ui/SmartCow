@@ -775,18 +775,12 @@ function showPage(p){
     var show = (!s.dataset.page || s.dataset.page === p);
     if (show){
       s.style.display = '';
-      // fade-in halus tiap ganti halaman (bukan blink instan)
-      s.style.opacity = '0';
-      s.style.transform = 'translateY(10px)';
-      s.style.transition = 'opacity .35s ease, transform .35s cubic-bezier(.32,.72,0,1)';
-      requestAnimationFrame(function(){
-        requestAnimationFrame(function(){
-          s.style.opacity = '1';
-          s.style.transform = 'none';
-        });
-      });
-      setTimeout(function(){ s.style.transition = ''; s.style.opacity = ''; s.style.transform = ''; }, 400);
+      // fade-in halus tiap ganti halaman (re-trigger paksa biar animasi jalan tiap klik)
+      s.classList.remove('page-in');
+      void s.offsetWidth;
+      s.classList.add('page-in');
     } else {
+      s.classList.remove('page-in');
       s.style.display = 'none';
     }
   });
