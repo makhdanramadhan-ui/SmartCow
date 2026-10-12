@@ -202,6 +202,67 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 @media(max-width:1100px){.grid-4{grid-template-columns:1fr 1fr}.grid-3{grid-template-columns:1fr}.grid-6{grid-template-columns:repeat(3,1fr)}.grid-2{grid-template-columns:1fr}}
 @media(max-width:600px){.grid-4,.grid-6{grid-template-columns:1fr 1fr}.topbar{padding:14px}.avg-value{font-size:40px}.auto-src{grid-template-columns:1fr}}
 
+/* FINAL: dua jenis sensor, dua node, satu dashboard. */
+[hidden]{display:none !important}
+.container{max-width:1440px;gap:24px;padding:28px}
+.overview-head{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:8px 0}
+.overview-head h2{font-size:30px;letter-spacing:-.8px;margin:8px 0}
+.overview-head .hint{font-size:13px;margin:0;line-height:1.6}
+.eyebrow{font-size:10px;font-weight:800;letter-spacing:2px;color:var(--cyan)}
+.node-pills{display:flex;gap:8px;flex-wrap:wrap}
+.node-pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:99px;padding:9px 12px;font-size:11px;white-space:nowrap}
+.node-pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.node-pill.online{color:var(--green);border-color:#22c55e66}
+.node-pill.online::before{background:var(--green)}
+.summary-grid{grid-template-columns:1.05fr 1.05fr 1.15fr 1fr;gap:14px}
+.summary-grid>.card{padding:20px;min-width:0}
+.summary-grid .card-label{line-height:1.5;font-size:10px;letter-spacing:1px}
+.summary-grid .avg-value{font-size:48px;letter-spacing:-1.5px;margin:14px 0}
+.summary-grid .status-pill{font-size:9px;padding:6px 10px;letter-spacing:.3px;line-height:1.5}
+.summary-grid .mini-stats{flex-wrap:wrap;gap:7px 12px;font-size:11px}
+.summary-grid .sprinkler{font-size:17px;min-height:50px;padding:12px}
+.summary-grid .mode-info,.summary-grid .timer{font-size:11px;line-height:1.65}
+.summary-grid .hint{font-size:10px;line-height:1.6}
+.summary-grid .manual-controls{flex-direction:column}
+.summary-grid .mode-btn{min-width:0;padding:10px 6px;font-size:11px;overflow-wrap:anywhere}
+.humidity-summary{border-color:#167d8b;background:linear-gradient(145deg,#103341,#10252e)}
+.humidity-summary .avg-value{color:#67e8f9}
+.status-pill.neutral{background:var(--card2);color:var(--muted);border:1px solid var(--line)}
+.sprinkler.unknown{color:var(--muted);background:var(--card2);border-color:var(--line)}
+.sprinkler.unknown .dot{background:var(--muted)}
+.badge.offline{background:#3a250a;color:#fbbf24;border-color:#92400e}
+.sensor-section{padding:22px;border:1px solid var(--line);border-radius:22px;background:var(--card2)}
+.sensor-section .section-title{margin-bottom:16px;gap:14px;flex-wrap:wrap}
+.sensor-section .section-title h2{margin:8px 0 0;font-size:20px;letter-spacing:-.4px}
+.humidity-section .eyebrow{color:#67e8f9}
+.sensor{padding:18px 14px;border-radius:15px;text-align:left}
+.sensor-meta{display:flex;justify-content:space-between;gap:6px;margin-bottom:18px;font-size:9px;font-weight:800;letter-spacing:1px;color:var(--muted)}
+.sensor-meta span:first-child{color:var(--txt)}
+.sensor .s-name{font-size:10px;letter-spacing:0;line-height:1.5}
+.sensor .s-temp{font-size:28px;letter-spacing:-.7px;margin:12px 0}
+.sensor .bar{height:4px;margin:14px 0}
+.sensor .s-state{font-size:9px;padding:5px 8px;letter-spacing:.5px}
+.sensor-unavailable{border-style:dashed}
+.sensor-unavailable .s-temp{color:var(--muted) !important}
+.humidity-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.humidity-sensor{background:linear-gradient(145deg,#12313e,#11212e)}
+.humidity-sensor .s-temp{color:#67e8f9}
+.humidity-sensor .bar i{background:linear-gradient(90deg,#0891b2,#67e8f9)}
+.dht-companion{margin:8px 0 12px;font-size:11px}
+.auth-panel{border-color:#3b82f666;display:grid;grid-template-columns:1fr 1.25fr;gap:10px 30px;align-items:center}
+.auth-panel .hint{line-height:1.7;max-width:440px}
+.login-form{display:flex;align-items:flex-end;gap:10px}
+.login-form label{display:flex;flex-direction:column;gap:7px;font-size:11px;color:var(--muted);min-width:0;flex:1}
+.login-form input,.chart-controls select{border:1px solid var(--line);border-radius:10px;background:var(--card2);color:var(--txt);padding:10px;width:100%;font:inherit}
+.login-form input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.auth-panel #fbStatus{grid-column:1/-1}
+.chart-controls{flex-wrap:wrap}
+.chart-controls select{width:auto;font-size:12px}
+.top-right{flex-wrap:wrap}
+@media(max-width:1200px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-head{align-items:flex-start;flex-direction:column}.auth-panel{grid-template-columns:1fr}}
+@media(max-width:700px){.container{padding:16px;gap:18px}.overview-head h2{font-size:25px}.brand h1{font-size:17px}.brand p{font-size:11px}.logo{width:46px;height:46px;font-size:30px;border-radius:14px}.top-right{width:100%;gap:8px}.clock-card{min-width:0;flex:1}.clock{font-size:22px}.date-line{font-size:10px}.badge{font-size:9px;padding:8px 10px}.summary-grid>.card{padding:14px}.summary-grid .avg-value{font-size:36px}.summary-grid .avg-value .unit{font-size:15px}.mini-stats{flex-wrap:wrap}.sensor-section{padding:14px}.humidity-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sensor .s-temp{font-size:25px}.sensor-meta{font-size:8px}.login-form{flex-wrap:wrap}.login-form label{flex-basis:40%}.login-form .btn{width:100%}.toolbar{flex-wrap:wrap}.section-title .hint{font-size:10px}}
+@media(max-width:380px){.summary-grid{grid-template-columns:1fr}.brand{gap:8px}.logo{display:none}.sensor{padding:12px 10px}}
+
 /* ---------- LIGHT MODE ---------- */
 :root[data-theme="light"]{
   --bg:#eef2f7; --card:#ffffff; --card2:#f1f5f9; --line:#cbd5e1;
@@ -232,6 +293,11 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 [data-theme="light"] .status-pill.bahaya{background:#fee2e2;color:#b91c1c;border-color:#fca5a5}
 [data-theme="light"] .wib-badge{background:#ccfbf1;color:#0f766e;border-color:#99f6e4}
 [data-theme="light"] .badge.live{background:#dcfce7;color:#15803d;border-color:#86efac;box-shadow:none}
+[data-theme="light"] .humidity-summary{background:linear-gradient(145deg,#ecfeff,#cffafe);border-color:#67e8f9}
+[data-theme="light"] .humidity-summary .avg-value,[data-theme="light"] .humidity-sensor .s-temp,[data-theme="light"] .humidity-section .eyebrow{color:#0e7490}
+[data-theme="light"] .humidity-sensor{background:linear-gradient(145deg,#ffffff,#ecfeff)}
+[data-theme="light"] .s-state.off{background:#e2e8f0;color:#475569}
+[data-theme="light"] .badge.offline{background:#fef3c7;color:#92400e;border-color:#fcd34d}
 
 /* ---------- HOVER & MICRO-INTERACTIONS ---------- */
 .btn{transition:transform .15s ease,box-shadow .15s ease,filter .15s ease}

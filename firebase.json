@@ -3,7 +3,8 @@
     "rules": "database.rules.json"
   },
   "hosting": {
-    "public": ".",
+    "public": "public",
+    "predeploy": ["node scripts/prepare-hosting.cjs"],
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -12,7 +13,9 @@
       "docs/**",
       "test/**",
       ".scratch/**",
-      "esp32/**"
+      "esp32/**",
+      "js/firebase-config.js",
+      "**/secrets.h"
     ],
     "headers": [
       {

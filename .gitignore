@@ -5,3 +5,5 @@ esp32/.pio/
 esp32/.vscode/
 
 .firebase/
+firmware/**/secrets.h
+/public/

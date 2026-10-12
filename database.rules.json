@@ -6,14 +6,14 @@
           "latest": {
             ".read": "auth != null",
             ".write": "auth != null",
-            ".validate": "newData.hasChildren(['t1', 't2', 't3', 't4', 't5', 't6', 'avg', 'ssr', 'n', 'ts']) && newData.child('avg').isNumber() && newData.child('avg').val() >= -55 && newData.child('avg').val() <= 125"
+            ".validate": "newData.hasChildren(['t1', 't2', 't3', 't4', 't5', 't6', 'ssr', 'n', 'ts']) && ((newData.child('avg').isNumber() && newData.child('avg').val() >= -55 && newData.child('avg').val() <= 125) || (newData.child('schemaVersion').val() == 3 && newData.child('validCount').val() == 0 && newData.child('validMask').val() == 0 && !newData.child('avg').exists()))"
           },
           "log": {
             ".read": "auth != null",
             ".indexOn": ["ts"],
             "$pushId": {
               ".write": "auth != null",
-              ".validate": "newData.hasChildren(['avg', 'ts']) && newData.child('avg').isNumber()"
+              ".validate": "newData.child('ts').isNumber() && (newData.child('avg').isNumber() || (newData.child('schemaVersion').val() == 3 && newData.child('validCount').val() == 0 && newData.child('validMask').val() == 0 && !newData.child('avg').exists()))"
             }
           }
         },

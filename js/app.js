@@ -1,24 +1,23 @@
-/* Smart Cow Sprinkler — app logic (simulation-first + MQTT ready) */
+/* SmartCow FINAL — Firebase, 6 DS18B20 + 4 DHT22. Relay milik ESP kanan. */
 const $ = (id) => document.getElementById(id);
 const SENSOR_NAMES = ['Titik 1 • Depan', 'Titik 2 • Depan', 'Titik 3 • Tengah', 'Titik 4 • Tengah', 'Titik 5 • Belakang', 'Titik 6 • Belakang'];
 const COLORS = ['#f87171','#fb923c','#facc15','#4ade80','#60a5fa','#c084fc'];
 const AVG_COLOR = '#22d3ee';
 
-let temps = [30.1, 30.4, 29.8, 30.2, 29.9, 30.0];
+let temps = Array(6).fill(null);
+let humidities = Array(4).fill(null);
+let telemetry = null, sensorView = SCSTelemetry.view(null), transportConnected = false;
+const fmtValue = (value, digits = 1) => SCSTelemetry.finite(value) ? value.toFixed(digits) : '—';
 let lastUpdate = null;
 let sprinklerOn = false;
 let sprayStart = null;
 let lastSprayEnd = 0;
 let history = [];   // {t, s:[6], avg} tiap 2 detik, maks 1800 (1 jam)
-let logs = JSON.parse(localStorage.getItem('scs_logs') || '[]'); // tiap 30 detik, maks 120
-let events = JSON.parse(localStorage.getItem('scs_events') || '[]');
+let logs = [];
+let events = [];
+try { const saved = JSON.parse(localStorage.getItem('scs_events') || '[]'); if (Array.isArray(saved)) events = saved.slice(0,50); } catch {}
 let fbConnected = false;
-let sensorCount = null;
-let lastLogTime = 0;
-
-try { history = JSON.parse(localStorage.getItem('scs_hist') || '[]'); } catch { history = []; }
-if (!Array.isArray(history)) history = [];
-history = history.slice(-1800);
+let controlLoaded = false;
 
 // ---------- THEME (light/dark) ----------
 function curTheme(){ return localStorage.getItem('scs_theme') || 'dark'; }
@@ -44,7 +43,7 @@ function tickClock(){
 }
 setInterval(tickClock, 1000); tickClock();
 
-// ---------- SENSOR GRID (jumlah kartu ikut sensor terdeteksi) ----------
+// ---------- SENSOR GRID (posisi tetap; sensor putus tidak menggeser kartu) ----------
 let renderedCount = 6;
 function buildGrid(count){
   renderedCount = count;
@@ -54,24 +53,32 @@ function buildGrid(count){
   for (let i = 0; i < count; i++){
     const d = document.createElement('div');
     d.className = 'sensor'; d.id = 'sensor'+i;
-    d.innerHTML = `<div class="s-name">S${i+1} • ${SENSOR_NAMES[i]}</div>
-      <div class="s-temp">--.-°</div>
+    d.innerHTML = `<div class="sensor-meta"><span>DS${i+1}</span><span>${i < 3 ? 'KANAN' : 'KIRI'}</span></div><div class="s-name">${SENSOR_NAMES[i]}</div>
+      <div class="s-temp">—</div>
       <div class="bar"><i></i></div>
       <div class="s-state ok">OK</div>`;
     g.appendChild(d);
   }
+  renderLegend();
+}
+function renderLegend(){
   const leg = $('legend'); leg.innerHTML = '';
-  for (let i = 0; i < count; i++){
+  const rh = $('chartMetric').value === 'humidity';
+  for (let i = 0; i < (rh ? 4 : 6); i++){
     const s = document.createElement('span');
-    s.innerHTML = `<i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[i]}"></i> S${i+1}`;
+    s.innerHTML = `<i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[i]}"></i> ${rh ? 'DHT' : 'DS'}${i+1}`;
     leg.appendChild(s);
   }
+}
+function buildHumidityGrid(){
+  $('humidityGrid').innerHTML = Array.from({length:4}, (_,i) => `<div class="sensor humidity-sensor" id="humidity${i}"><div class="sensor-meta"><span>DHT${i+1}</span><span>${i < 2 ? 'KANAN' : 'KIRI'}</span></div><div class="s-name">Kelembapan udara</div><div class="s-temp">—</div><div class="bar"><i></i></div><div class="dht-companion hint">Suhu DHT: —</div><div class="s-state off">MENUNGGU</div></div>`).join('');
 }
 function buildLogHead(count){
   const tr = $('logHead'); if (!tr) return;
   let h = '<th>Waktu (WIB)</th>';
-  for (let i = 1; i <= count; i++) h += `<th>S${i}</th>`;
-  h += '<th>Rata²</th><th>Status</th><th>Sprinkler</th>';
+  for (let i = 1; i <= count; i++) h += `<th>DS${i} °C</th>`;
+  for (let i = 1; i <= 4; i++) h += `<th>DHT${i} %RH</th>`;
+  h += '<th>Rata² DS</th><th>Rata² RH</th><th>Status</th><th>Sprinkler</th>';
   tr.innerHTML = h;
 }
 function tempColor(t){
@@ -81,12 +88,19 @@ function tempColor(t){
   return '#60a5fa';
 }
 function renderSensors(){
-  const shown = temps.slice(0, renderedCount);
-  let mn = 99, mx = -99;
-  shown.forEach((t,i)=>{
-    mn = Math.min(mn,t); mx = Math.max(mx,t);
+  const shown = temps.filter(SCSTelemetry.finite);
+  temps.forEach((t,i)=>{
     const el = $('sensor'+i); if(!el) return;
-    el.querySelector('.s-temp').textContent = t.toFixed(1)+'°';
+    const valid = SCSTelemetry.finite(t);
+    el.classList.toggle('sensor-unavailable', !valid);
+    if (!valid){
+      el.querySelector('.s-temp').textContent = '—';
+      el.querySelector('.bar i').style.width = '0%';
+      const st = el.querySelector('.s-state'); st.className = 's-state off';
+      st.textContent = sensorView.dsStates[i] === 'stale' ? 'DATA LAMA' : 'BELUM TERBACA';
+      return;
+    }
+    el.querySelector('.s-temp').textContent = t.toFixed(1)+'°C';
     el.querySelector('.s-temp').style.color = tempColor(t);
     const pct = Math.min(100, Math.max(4, (t-25)/(38-25)*100));
     const bar = el.querySelector('.bar i');
@@ -96,75 +110,104 @@ function renderSensors(){
     else if (t >= CFG.threshold - CFG.hysteresis){ st.textContent = 'WASPADA'; st.className = 's-state warn'; }
     else { st.textContent = 'NORMAL'; st.className = 's-state ok'; }
   });
-  const avg = SCS.avgOf(shown);
-  $('avgTemp').textContent = avg.toFixed(1);
-  $('minTemp').textContent = mn.toFixed(1)+'°C';
-  $('maxTemp').textContent = mx.toFixed(1)+'°C';
+  const avg = sensorView.avg;
+  $('avgTemp').textContent = fmtValue(avg);
+  $('minTemp').textContent = shown.length ? Math.min(...shown).toFixed(1)+'°C' : '—';
+  $('maxTemp').textContent = shown.length ? Math.max(...shown).toFixed(1)+'°C' : '—';
   $('thresholdLabel').textContent = CFG.threshold.toFixed(1)+'°C';
   const pill = $('avgStatus');
-  if (avg >= CFG.threshold + 1){ pill.textContent='🔥 STRESS PANAS — SEMPROT!'; pill.className='status-pill bahaya'; }
+  if (!SCSTelemetry.finite(avg)){ pill.textContent='DATA BELUM TERSEDIA'; pill.className='status-pill neutral'; }
+  else if (!sensorView.complete){ pill.textContent='DATA PARSIAL · AUTO SUHU DIBLOKIR'; pill.className='status-pill waspada'; }
+  else if (avg >= CFG.threshold + 1){ pill.textContent='SUHU TINGGI · DI ATAS AMBANG'; pill.className='status-pill bahaya'; }
   else if (avg >= CFG.threshold){ pill.textContent='⚠️ WASPADA — AMBANG TERSENTUH'; pill.className='status-pill waspada'; }
-  else { pill.textContent='✅ NORMAL — SAPI NYAMAN'; pill.className='status-pill normal'; }
-  if (lastUpdate) $('updateAge').textContent = 'update: ' + new Date(lastUpdate).toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta'}) + ' WIB';
+  else { pill.textContent='DI BAWAH AMBANG SUHU'; pill.className='status-pill normal'; }
+  $('dsSummary').textContent = `${sensorView.validCount}/6 DS valid · rata-rata ${sensorView.complete ? 'lengkap' : 'parsial'}${sensorView.legacy ? ' · firmware lama' : ''}`;
+  $('sensorTitle').textContent = `6 titik suhu · ${sensorView.validCount} valid`;
+  $('noSensor').style.display = telemetry && !shown.length ? '' : 'none';
+  $('updateAge').textContent = sensorView.ts ? 'Update ' + new Date(sensorView.ts).toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta'}) + ' WIB · ' + (sensorView.online ? 'terkini' : 'kedaluwarsa') : 'Belum ada telemetry';
+  humidities.forEach((h,i) => {
+    const el = $('humidity'+i), valid = SCSTelemetry.finite(h); if (!el) return;
+    el.classList.toggle('sensor-unavailable', !valid);
+    el.querySelector('.s-temp').textContent = valid ? h.toFixed(1) + '%' : '—';
+    el.querySelector('.bar i').style.width = valid ? h + '%' : '0%';
+    el.querySelector('.dht-companion').textContent = 'Suhu DHT: ' + fmtValue(sensorView.d[i]) + ' °C';
+    const st = el.querySelector('.s-state'); st.className = 's-state ' + (valid ? 'ok' : 'off');
+    st.textContent = valid ? 'TERBACA' : sensorView.rhStates[i] === 'stale' ? 'DATA LAMA' : 'BELUM TERBACA';
+  });
+  const goodRH = humidities.filter(SCSTelemetry.finite);
+  $('avgHumidity').textContent = fmtValue(sensorView.humidityAvg);
+  $('minHumidity').textContent = goodRH.length ? Math.min(...goodRH).toFixed(1)+'%' : '—';
+  $('maxHumidity').textContent = goodRH.length ? Math.max(...goodRH).toFixed(1)+'%' : '—';
+  $('humidityCount').textContent = `${sensorView.humidityValidCount}/4 valid`;
+  $('rhSummary').textContent = `${sensorView.humidityValidCount}/4 DHT valid · bukan pemicu relay`;
+  $('humidityStatus').textContent = sensorView.humidityComplete ? '4 TITIK TERPANTAU' : goodRH.length ? 'DATA KELEMBAPAN PARSIAL' : 'DATA BELUM TERSEDIA';
+  $('humidityStatus').className = 'status-pill ' + (sensorView.humidityComplete ? 'normal' : 'neutral');
+  for (const [id, name, online] of [['rightNode','ESP kanan',sensorView.online],['leftNode','ESP kiri',sensorView.leftOnline]]){
+    $(id).textContent = `${name} · ${online ? 'online' : 'belum terhubung'}`; $(id).classList.toggle('online', online);
+  }
   return avg;
 }
 
+function refreshTelemetry(){
+  sensorView = SCSTelemetry.view(telemetry, window.SCSFirebase?.now() || Date.now());
+  temps = sensorView.s; humidities = sensorView.h;
+  renderSensors(); renderSprinkler();
+  setConn(fbConnected ? (!transportConnected ? 'err' : sensorView.online ? 'live' : 'offline') : 'login');
+  $('btnSprayOn').disabled = $('btnSprayOff').disabled = CFG.mode !== 'manual' || !controlLoaded || !fbConnected || !sensorView.online || !transportConnected;
+  autoControl(sensorView.avg);
+  $('btnLogNow').disabled = !sensorView.online || !fbConnected;
+}
+
 // ---------- SPRINKLER (perintah manual ke ESP32 via Firebase) ----------
-function setSprinkler(on, reason){
-  if (!fbConnected || !window.SCSFirebase){ $('sprinklerReason').textContent = 'Firebase belum terhubung.'; return; }
-  SCSFirebase.pushOverride(on, reason);
+async function setSprinkler(on, reason){
+  if (!fbConnected || !controlLoaded || !sensorView.online || !transportConnected || CFG.mode !== 'manual' || !window.SCSFirebase){ $('sprinklerReason').textContent = 'Perangkat offline atau mode belum siap; perintah tidak dikirim.'; return; }
+  try { await SCSFirebase.pushOverride(on, reason); }
+  catch { $('sprinklerReason').textContent = 'Perintah gagal dikirim.'; return; }
   $('sprinklerReason').textContent = 'Perintah dikirim, menunggu ESP32 mengeksekusi…';
 }
 function renderSprinkler(){
   const box = $('sprinklerState');
+  if (sensorView.ssr === null){
+    box.className = 'sprinkler unknown'; $('sprinklerText').textContent = 'BELUM DIKETAHUI';
+    $('sprinklerTimer').textContent = 'Menunggu status relay terbaru dari ESP kanan.';
+    return;
+  }
   box.className = 'sprinkler ' + (sprinklerOn ? 'on' : 'off');
   $('sprinklerText').textContent = sprinklerOn ? 'MENYEMPROT 💦' : 'MATI';
   if (sprinklerOn && sprayStart){
     const el = Math.floor((Date.now()-sprayStart)/1000);
-    const left = CFG.maxDuration - el;
-    $('sprinklerTimer').textContent = `⏱ Jalan ${el} dtk • auto-off dalam ${Math.max(0,left)} dtk`;
-    if (left <= 0) setSprinkler(false, `durasi maks ${CFG.maxDuration} dtk tercapai (proteksi air)`);
+    $('sprinklerTimer').textContent = CFG.mode === 'manual' ? 'Manual ON · tetap nyala sampai perintah OFF.' : curAutoSrc() === 'schedule' ? 'Mengikuti durasi slot jadwal di ESP.' : `Terpantau nyala ${el} dtk · proteksi durasi dijalankan ESP.`;
   } else {
-    $('sprinklerTimer').textContent = CFG.mode==='manual' ? 'Mode manual — gunakan tombol.' : 'Mode otomatis — menunggu ambang.';
+    $('sprinklerTimer').textContent = CFG.mode==='manual' ? 'Mode manual — gunakan tombol.' : curAutoSrc()==='schedule' ? 'Mode jadwal — menunggu slot aktif.' : 'Mode otomatis suhu — status dari ESP.';
   }
 }
 setInterval(renderSprinkler, 1000);
 
 function autoControl(avg){
-  // Relay fisik milik ESP32; web hanya mirror status + tampilkan rekomendasi.
-  if (CFG.mode !== 'auto' || fbConnected){
-    if (CFG.mode==='auto' && fbConnected){
-      if (curAutoSrc() === 'schedule'){
-        const act = schedActiveNow();
-        const slots = schedSlots();
-        const daftar = slots.map((s) => SCS.formatIDSlot(s)).join(', ');
-        $('sprinklerReason').textContent = act
-          ? `Rekomendasi: NYALA (jadwal ${daftar}). ESP mengeksekusi.`
-          : `Standby jadwal (${slots.length}×: ${daftar}).`;
-      } else if (avg >= CFG.threshold && !sprinklerOn) $('sprinklerReason').textContent = `Rekomendasi: NYALA (avg ${avg.toFixed(1)} ≥ ${CFG.threshold.toFixed(1)}°C). ESP mengeksekusi.`;
-      else if (avg <= CFG.threshold - CFG.hysteresis && sprinklerOn) $('sprinklerReason').textContent = 'Rekomendasi: MATI.';
-    }
-    return;
+  if (!sensorView.online){ $('sprinklerReason').textContent = 'Tidak ada status perangkat terbaru. Nilai lama tidak dipakai sebagai data live.'; return; }
+  if (CFG.mode === 'auto' && curAutoSrc() === 'threshold' && !sensorView.complete){ $('sprinklerReason').textContent = 'Otomatis suhu diblokir: perlu 6/6 DS valid dan fresh. DHT tidak memengaruhi syarat ini.'; return; }
+  // Web TIDAK pernah menjalankan kontrol otomatis atau auto-off sendiri.
+  if (CFG.mode === 'manual'){
+    $('sprinklerReason').textContent = 'Mode manual · status mengikuti laporan relay ESP kanan.';
+  } else if (curAutoSrc() === 'schedule'){
+    $('sprinklerReason').textContent = `Mode jadwal · ${schedSlots().length} slot tersimpan. Waktu dan eksekusi ditangani ESP kanan.`;
+  } else if (SCSTelemetry.finite(avg)){
+    $('sprinklerReason').textContent = avg >= CFG.threshold
+      ? 'Ambang suhu tercapai · relay mengikuti hysteresis, durasi maks, dan cooldown ESP.'
+      : 'Suhu di bawah ambang · relay tetap mengikuti logika lokal ESP.';
   }
-  const d = SCS.decideAuto(avg, sprinklerOn, CFG, schedActiveNow());
-  if (d === 'on') setSprinkler(true, curAutoSrc() === 'schedule' ? 'jadwal harian' : `avg ${avg.toFixed(1)}°C ≥ threshold ${CFG.threshold.toFixed(1)}°C`);
-  else if (d === 'off') setSprinkler(false, curAutoSrc() === 'schedule' ? 'jadwal selesai' : `avg ${avg.toFixed(1)}°C ≤ ${(CFG.threshold-CFG.hysteresis).toFixed(1)}°C (hysteresis)`);
-  else if (!sprinklerOn) $('sprinklerReason').textContent = curAutoSrc() === 'schedule' ? 'Standby jadwal — menunggu jam semprot.' : `Standby — avg ${avg.toFixed(1)}°C < ${CFG.threshold.toFixed(1)}°C`;
 }
 
 // ---------- DATA MASUK (dari Firebase via ESP32) ----------
-function onNewData(arr){
-  temps = arr.slice(0,6);
-  lastUpdate = Date.now();
-  const st = $('sensorTitle'); if (st) st.textContent = SCS.sensorTitle(sensorCount);
-  if (renderedCount === 0) return;
-  const avg = renderSensors();
-  history.push({ t: lastUpdate, s: temps.map(v=>+v.toFixed(2)), avg:+avg.toFixed(2) });
+function onNewData(raw){
+  telemetry = raw;
+  refreshTelemetry();
+  if (!raw || !sensorView.online || raw.ts === lastUpdate) return;
+  lastUpdate = raw.ts;
+  history.push({ t: lastUpdate, s: temps, h: humidities, avg:sensorView.avg, humidityAvg:sensorView.humidityAvg });
   if (history.length > 1800) history = history.slice(-1800);
   localStorage.setItem('scs_hist', JSON.stringify(history.slice(-600)));
   drawChart();
-  autoControl(avg);
-  if (Date.now() - lastLogTime > 30000) addLogRow(avg);
 }
 
 // ---------- CHART (canvas murni, offline-friendly) ----------
@@ -174,59 +217,74 @@ function drawChart(){
   const W = c.width = c.clientWidth * 2, H = c.height = 440;
   ctx.clearRect(0,0,W,H);
   if (history.length < 2){ ctx.fillStyle=T.empty; ctx.font='28px sans-serif'; ctx.fillText('Menunggu data…', 30, 60); return; }
-  const data = history.slice(-720);
+  const data = history.filter((d) => Date.now() - d.t < 3600000).slice(-1800);
+  if (data.length < 2) return;
+  const rh = $('chartMetric').value === 'humidity';
+  const values = (row) => rh ? row.h || [] : row.s || [];
   let mn = 99, mx = -99;
-  data.forEach(d=>{ d.s.forEach(v=>{mn=Math.min(mn,v);mx=Math.max(mx,v);}); });
-  mn = Math.min(mn, CFG.threshold-2)-0.3; mx = Math.max(mx, CFG.threshold+2)+0.3;
-  const X = i => 60 + i/(data.length-1)*(W-80);
+  data.forEach(d=>{ values(d).filter(SCSTelemetry.finite).forEach(v=>{mn=Math.min(mn,v);mx=Math.max(mx,v);}); });
+  if (rh){ mn = 0; mx = 100; }
+  else { mn = Math.min(mn, CFG.threshold-2)-0.3; mx = Math.max(mx, CFG.threshold+2)+0.3; }
+  const X = i => 60 + (data[i].t-data[0].t)/Math.max(1,data[data.length-1].t-data[0].t)*(W-80);
   const Y = v => 20 + (1-(v-mn)/(mx-mn))*(H-70);
   // grid + threshold
   ctx.strokeStyle=T.grid; ctx.fillStyle=T.txt; ctx.font='22px sans-serif';
   for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4, y=Y(v);
     ctx.beginPath(); ctx.moveTo(60,y); ctx.lineTo(W-20,y); ctx.stroke();
-    ctx.fillText(v.toFixed(1)+'°', 4, y+7); }
+    ctx.fillText(v.toFixed(1)+(rh?'%':'°'), 4, y+7); }
+  if (!rh){
   const yT = Y(CFG.threshold);
   ctx.setLineDash([12,8]); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=3;
   ctx.beginPath(); ctx.moveTo(60,yT); ctx.lineTo(W-20,yT); ctx.stroke(); ctx.setLineDash([]);
   ctx.fillStyle='#fbbf24'; ctx.fillText('threshold '+CFG.threshold.toFixed(1)+'°', 70, yT-10);
+  }
   const draw = (idx, color, get) => {
     ctx.strokeStyle=color; ctx.lineWidth = idx==='avg'?5:2.5; ctx.beginPath();
-    data.forEach((d,i)=>{ const y=Y(get(d)); i?ctx.lineTo(X(i),y):ctx.moveTo(X(i),y); });
+    let drawing = false, previous = null;
+    data.forEach((d,i)=>{
+      const value = get(d);
+      if (!SCSTelemetry.finite(value)){ drawing = false; return; }
+      if (previous !== null && d.t - previous > 15000) drawing = false;
+      const y = Y(value); drawing ? ctx.lineTo(X(i),y) : ctx.moveTo(X(i),y);
+      drawing = true; previous = d.t;
+    });
     ctx.stroke();
   };
-  for(let s=0;s<renderedCount;s++) draw(s, COLORS[s]+'cc', d=>d.s[s]);
-  if ($('showAvg').checked) draw('avg', AVG_COLOR, d=>d.avg);
+  for(let s=0;s<(rh?4:6);s++) draw(s, COLORS[s]+'cc', d=>values(d)[s]);
+  if ($('showAvg').checked) draw('avg', AVG_COLOR, d=>rh ? d.humidityAvg : d.avg);
 }
 window.addEventListener('resize', drawChart);
 $('showAvg').onchange = drawChart;
+$('chartMetric').onchange = () => { renderLegend(); drawChart(); };
 $('btnClearChart').onclick = ()=>{ history=[]; localStorage.removeItem('scs_hist'); drawChart(); };
 
 // ---------- LOG 1 JAM ----------
 function addLogRow(avg){
-  lastLogTime = Date.now();
-  const row = { t: lastLogTime, s: temps.map(v=>+v.toFixed(1)), avg:+avg.toFixed(1), spray: sprinklerOn?1:0 };
+  if (!sensorView.online) return;
+  const row = { t: telemetry.ts, s: temps.slice(), h: humidities.slice(), avg:sensorView.avg,
+    humidityAvg:sensorView.humidityAvg, spray: sprinklerOn?1:0 };
   logs.unshift(row); logs = logs.slice(0,120);
   localStorage.setItem('scs_logs', JSON.stringify(logs));
-  if (fbConnected && window.SCSFirebase) SCSFirebase.pushLog(row);
   renderLogs();
 }
 function renderLogs(){
   const f = $('filterSensor').value;
   const tb = $('logBody'); tb.innerHTML='';
-  const rows = logs.filter(r => f==='all' ? true : f==='panas' ? r.avg>=CFG.threshold : r.avg<CFG.threshold);
-  if (!rows.length){ tb.innerHTML = `<tr><td colspan="${4 + renderedCount}" class="empty">Tidak ada baris untuk filter ini.</td></tr>`; }
+  const rows = logs.filter(r => f==='all' ? true : SCSTelemetry.finite(r.avg) && (f==='panas' ? r.avg>=CFG.threshold : r.avg<CFG.threshold));
+  if (!rows.length){ tb.innerHTML = '<tr><td colspan="15" class="empty">Belum ada riwayat sensor untuk filter ini.</td></tr>'; }
   rows.forEach(r=>{
     const tr = document.createElement('tr');
     const time = new Date(r.t).toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    const hot = r.avg >= CFG.threshold;
-    tr.innerHTML = `<td>${time}</td>` + r.s.slice(0, renderedCount).map(v=>`<td class="${v>=CFG.threshold?'hot':'cold'}">${v.toFixed(1)}</td>`).join('')
-      + `<td><b>${r.avg.toFixed(1)}</b></td><td>${hot?'🔥 PANAS':'✅ OK'}</td><td>${r.spray?'💦 ON':'—'}</td>`;
+    const hot = SCSTelemetry.finite(r.avg) && r.avg >= CFG.threshold;
+    tr.innerHTML = `<td>${time}</td>` + Array.from({length:6},(_,i)=>`<td>${fmtValue(r.s?.[i])}</td>`).join('')
+      + Array.from({length:4},(_,i)=>`<td>${fmtValue(r.h?.[i])}</td>`).join('')
+      + `<td><b>${fmtValue(r.avg)}</b></td><td>${fmtValue(r.humidityAvg)}</td><td>${!SCSTelemetry.finite(r.avg)?'TIDAK VALID':hot?'PANAS':'DI BAWAH AMBANG'}</td><td>${r.spray?'💦 ON':'OFF'}</td>`;
     tb.appendChild(tr);
   });
-  $('logCount').textContent = `${logs.length}/120 baris (1 jam @30 dtk)`;
+  $('logCount').textContent = `${logs.length}/120 baris terbaru`;
 }
 $('filterSensor').onchange = renderLogs;
-$('btnLogNow').onclick = ()=>{ const avg = SCS.avgOf(temps); lastLogTime = 0; addLogRow(avg); };
+$('btnLogNow').onclick = ()=> addLogRow(sensorView.avg);
 $('btnClearLog').onclick = async ()=>{
   if (await askConfirm('🗑 Hapus semua log?', 'Semua baris log di browser akan hilang. Data di Firebase tetap ada.')){
     logs=[]; localStorage.removeItem('scs_logs'); renderLogs();
@@ -250,28 +308,30 @@ function closeConfirm(v){
   if (confirmRes){ const r = confirmRes; confirmRes = null; r(v); }
 }
 $('btnExport').onclick = ()=>{
-  let csv = 'waktu_wib,' + Array.from({length: renderedCount}, (_,i)=>'s'+(i+1)).join(',') + ',avg,status,sprinkler\n';
+  let csv = 'waktu_wib,ds1,ds2,ds3,ds4,ds5,ds6,dht1_rh,dht2_rh,dht3_rh,dht4_rh,avg_ds,avg_rh,sprinkler\n';
   [...logs].reverse().forEach(r=>{
     const w = new Date(r.t).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'});
-    csv += `"${w}",${r.s.slice(0, renderedCount).join(',')},${r.avg},${r.avg>=CFG.threshold?'PANAS':'NORMAL'},${r.spray?'ON':'OFF'}\n`;
+    csv += `"${w}",` + [...Array.from({length:6},(_,i)=>r.s?.[i]),...Array.from({length:4},(_,i)=>r.h?.[i]),r.avg,r.humidityAvg].map(v=>SCSTelemetry.finite(v)?v:'').join(',') + `,${r.spray?'ON':'OFF'}\n`;
   });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download = 'log-suhu-kandang.csv'; a.click();
+  a.download = 'smartcow-ds-dht.csv'; a.click(); URL.revokeObjectURL(a.href);
 };
 
 // ---------- EVENTS ----------
 function pushEvent(msg){
   events.unshift({ t: Date.now(), msg }); events = events.slice(0,50);
   localStorage.setItem('scs_events', JSON.stringify(events));
-  if (fbConnected && window.SCSFirebase) SCSFirebase.pushEvent(msg);
+  if (fbConnected && window.SCSFirebase) SCSFirebase.pushEvent(msg).catch(()=>{});
   renderEvents();
 }
 function renderEvents(){
   const ul = $('eventList'); ul.innerHTML = events.length?'':'<li class="hint">Belum ada event.</li>';
   events.forEach(e=>{
     const li = document.createElement('li');
-    li.innerHTML = `<div>${e.msg}</div><div class="t">${new Date(e.t).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})} WIB</div>`;
+    const text = document.createElement('div'); text.textContent = e.msg;
+    const stamp = document.createElement('div'); stamp.className='t'; stamp.textContent = new Date(e.t).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})+' WIB';
+    li.append(text, stamp);
     ul.appendChild(li);
   });
 }
@@ -303,7 +363,7 @@ function clampToday(iso, hm){
 // Aturan: tanggal bebas (min hari ini). Khusus hari ini, jam min = sekarang+1 mnt.
 function renderSchedList(){
   const box = $('schedList'); if (!box) return;
-  const locked = CFG.mode !== 'auto';
+  const locked = CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected;
   box.innerHTML = '';
   const slots = schedSlots();
   if (!slots.length){
@@ -362,7 +422,7 @@ function renderSchedList(){
       fbPushControl();
     };
   });
-  const add = $('btnAddSched'); if (add) add.disabled = CFG.mode !== 'auto' || schedSlots().length >= 6;
+  const add = $('btnAddSched'); if (add) add.disabled = locked || schedSlots().length >= 6;
 }
 function readSchedList(keepPast){
   // Nilai jadwal hidup di CFG.schedules (popup menulis langsung ke sana).
@@ -588,8 +648,9 @@ function syncButtons(){
   if (typeof closePicker === 'function') closePicker(); // anchor lama bisa hilang pas re-render
   $('btnAuto').classList.toggle('active', CFG.mode==='auto');
   $('btnManual').classList.toggle('active', CFG.mode==='manual');
-  $('btnSprayOn').disabled = $('btnSprayOff').disabled = CFG.mode!=='manual';
-  const locked = CFG.mode !== 'auto';
+  $('btnSprayOn').disabled = $('btnSprayOff').disabled = CFG.mode!=='manual' || !controlLoaded || !fbConnected || !sensorView.online || !transportConnected;
+  $('btnAuto').disabled = $('btnManual').disabled = !fbConnected || !controlLoaded || !transportConnected;
+  const locked = CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected;
   const src = curAutoSrc();
   const isThresh = src === 'threshold';
   $('srcThreshold').checked = isThresh;
@@ -598,7 +659,7 @@ function syncButtons(){
   ['inThreshold','rangeThreshold'].forEach((id)=>{ $(id).disabled = locked || !isThresh; });
   ['inMaxDur','inCooldown'].forEach((id)=>{ $(id).disabled = locked; });
   $('btnSaveCfg').disabled = locked;
-  $('btnSaveCfg').textContent = locked ? '🔒 Terkunci saat mode manual' : '💾 Simpan Pengaturan';
+  $('btnSaveCfg').textContent = !fbConnected ? '🔐 Login untuk mengatur' : !controlLoaded ? 'Menunggu konfigurasi perangkat' : locked ? '🔒 Pengaturan terkunci' : '💾 Simpan Pengaturan';
   $('inThreshold').value = CFG.threshold; $('rangeThreshold').value = CFG.threshold;
   $('inMaxDur').value = CFG.maxDuration; $('inCooldown').value = CFG.cooldown;
   // Conditional: hanya grup yang kepilih yang tampil (yang lain display:none biar clean).
@@ -615,24 +676,26 @@ $('btnManual').onclick = ()=>{ CFG.mode='manual'; saveCfg(); syncButtons(); push
 $('btnSprayOn').onclick = ()=> setSprinkler(true, 'tombol manual');
 $('btnSprayOff').onclick = ()=> setSprinkler(false, 'tombol manual');
 function fbPushControl(){
-  if (fbConnected && window.SCSFirebase){
+  if (fbConnected && controlLoaded && transportConnected && window.SCSFirebase){
     const slots = schedSlots();
     const ctl = { mode: CFG.mode, autoSrc: curAutoSrc(), threshold: CFG.threshold, hysteresis: CFG.hysteresis, maxDuration: CFG.maxDuration, cooldown: CFG.cooldown, schN: slots.length, schOn: curAutoSrc() === 'schedule' && slots.length ? 1 : 0 };
     slots.forEach((s, i) => { ctl['sch' + (i + 1) + 'Date'] = s.date; ctl['sch' + (i + 1) + 'Start'] = s.start; ctl['sch' + (i + 1) + 'Dur'] = s.dur; });
     // Kompatibel firmware lama (1 jadwal): slot pertama.
     if (slots.length){ ctl.schStart = slots[0].start; ctl.schDur = slots[0].dur; }
-    SCSFirebase.pushControl(ctl);
+    SCSFirebase.pushControl(ctl).catch(()=>{ $('sprinklerReason').textContent='Pengaturan gagal dikirim ke Firebase.'; });
+  } else {
+    $('sprinklerReason').textContent='Konfigurasi belum tersinkron; perubahan belum dikirim.';
   }
 }
 // Info kecil: lagi pake mode apa + ringkasannya.
 function updateModeInfo(){
   const el = $('modeInfo'); if (!el) return;
   if (CFG.mode !== 'auto'){
-    el.textContent = '🔴 Semprotan dalam mode MANUAL — pakai tombol Nyalakan / Matikan di atas.';
+    el.textContent = 'Manual: ON bertahan sampai perintah OFF, termasuk saat internet putus. Uji tanpa beban AC dahulu.';
     return;
   }
   if (curAutoSrc() === 'threshold'){
-    el.textContent = `🌡️ Semprotan akan menyala selama ${CFG.maxDuration} detik dan cooldown selama ${CFG.cooldown} detik ketika suhu menyentuh angka ${(+CFG.threshold).toFixed(1)}°C.`;
+    el.textContent = `🌡️ Auto suhu ≥ ${(+CFG.threshold).toFixed(1)}°C · wajib 6 DS valid · maks ${CFG.maxDuration} dtk, cooldown ${CFG.cooldown} dtk. Bisa mati lebih awal saat suhu turun/data gagal.`;
     return;
   }
   const now = Date.now(), today = SCS.wibDateStr();
@@ -664,7 +727,7 @@ let fbTries = 0;
 function setFbStatus(msg, kind){
   const el = $('fbStatus'); if (!el) return;
   el.textContent = msg || '';
-  el.style.display = (kind === 'live' || !msg) ? 'none' : '';
+  el.style.display = !msg ? 'none' : '';
 }
 function fbConnect(){
   if (!window.SCSFirebase){ // module SDK belum termuat, coba lagi sebentar
@@ -678,23 +741,33 @@ function fbConnect(){
   setFbStatus('Menghubungkan ke Firebase…', 'sim');
   SCSFirebase.connect({
     onStatus: (msg, kind)=>{ setFbStatus(msg, kind); setConn(kind); },
+    onTransport: (online)=>{ transportConnected=online; syncButtons(); refreshTelemetry(); },
+    onAuth: (ok)=>{
+      fbConnected=ok; $('authPanel').hidden=ok; $('btnLogout').hidden=!ok;
+      if (!ok){ controlLoaded=false; telemetry=null; transportConnected=false; lastUpdate=null; history=[]; logs=[]; events=[]; renderLogs(); renderEvents(); drawChart(); }
+      setFbStatus(ok ? '' : 'Masuk dengan akun Firebase yang sudah ada.', 'login'); syncButtons(); refreshTelemetry();
+    },
+    onControl: (ctl)=>{
+      if (!ctl){ controlLoaded=false; syncButtons(); return; }
+      controlLoaded=true;
+      if (ctl.mode === 'manual' || ctl.mode === 'auto') CFG.mode=ctl.mode;
+      if (ctl.autoSrc === 'schedule' || ctl.autoSrc === 'threshold') CFG.autoSrc=ctl.autoSrc;
+      for (const key of ['threshold','hysteresis','maxDuration','cooldown']) if (SCSTelemetry.finite(ctl[key])) CFG[key]=ctl[key];
+      CFG.schedules=Array.from({length:Math.min(6,Math.max(0,ctl.schN||0))},(_,i)=>({date:ctl[`sch${i+1}Date`],start:ctl[`sch${i+1}Start`],dur:ctl[`sch${i+1}Dur`]}));
+      saveCfg(); syncButtons(); refreshTelemetry();
+    },
     onTelemetry: (p)=>{
-      fbConnected = true; setConn('live');
-      if (p && Array.isArray(p.s)){
-        sensorCount = (typeof p.n === 'number') ? p.n : null;
-        const vc = SCS.visibleCount(sensorCount);
-        if (vc != null && vc !== renderedCount){ buildGrid(vc); buildLogHead(vc); }
-        onNewData(p.s);
-        if (typeof p.ssr === 'number' && ((p.ssr === 1) !== sprinklerOn)){
-          sprinklerOn = p.ssr === 1; sprayStart = sprinklerOn ? Date.now() : null;
-          if (!sprinklerOn) lastSprayEnd = Date.now();
-          pushEvent(sprinklerOn ? (p.sch ? '💦 ESP32: Sprinkler ON (jadwal)' : '💦 ESP32: Sprinkler ON') : '⛔ ESP32: Sprinkler OFF');
-          renderSprinkler();
-        }
+      onNewData(p);
+      if (sensorView.ssr !== null){
+        const changed=(sensorView.ssr===1)!==sprinklerOn;
+        sprinklerOn=sensorView.ssr===1;
+        if (changed) sprayStart=sprinklerOn?Date.now():null;
+        renderSprinkler();
       }
     },
-    onSeedLogs: (rows)=>{ if (rows.length){ logs = SCS.pruneLogs(rows, 120); localStorage.setItem('scs_logs', JSON.stringify(logs)); renderLogs(); } }
-  }).then((ok)=>{ fbConnected = !!ok; if (ok){ setFbStatus('', 'live'); fbPushControl(); } })
+    onSeedLogs: (rows)=>{ logs = SCS.pruneLogs(rows, 120); localStorage.setItem('scs_logs', JSON.stringify(logs)); renderLogs(); },
+    onEvents: (rows)=>{ events=rows; renderEvents(); }
+  })
     .catch((e)=>{ setFbStatus('Firebase: ' + e.message, 'err'); setConn('err'); });
 }
 function setConn(kind){
@@ -702,7 +775,17 @@ function setConn(kind){
   if (kind==='sim'){ b.textContent='● SIMULASI'; b.className='badge sim'; }
   if (kind==='live'){ b.textContent='● LIVE ESP32'; b.className='badge live'; }
   if (kind==='err'){ b.textContent='● KONEKSI GAGAL'; b.className='badge err'; }
+  if (kind==='offline'){ b.textContent='● ESP OFFLINE / DATA LAMA'; b.className='badge offline'; }
+  if (kind==='login'){ b.textContent='● PERLU LOGIN'; b.className='badge sim'; }
 }
+
+$('loginForm').onsubmit = async (e)=>{
+  e.preventDefault(); $('btnLogin').disabled=true; setFbStatus('Memeriksa akun…','login');
+  try { await SCSFirebase.login($('loginEmail').value.trim(),$('loginPassword').value); $('loginPassword').value=''; }
+  catch { setFbStatus('Login gagal. Periksa email/password dan koneksi internet.','err'); }
+  finally { $('btnLogin').disabled=false; }
+};
+$('btnLogout').onclick=()=>SCSFirebase.logout().catch(()=>{});
 
 // ---------- SETTINGS ----------
 $('rangeThreshold').oninput = e => { $('inThreshold').value = e.target.value; };
@@ -805,14 +888,16 @@ $('confirmYes').onclick = () => closeConfirm(true);
 $('confirmNo').onclick = () => closeConfirm(false);
 $('confirmOverlay').addEventListener('pointerdown', (e) => { if (e.target === $('confirmOverlay')) closeConfirm(false); });
 document.querySelectorAll('.side-link').forEach((b) => { b.addEventListener('click', () => showPage(b.dataset.page)); });
-buildGrid(6); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
+history=[]; logs=[]; // tidak menyajikan cache lama sebagai data live sebelum login
+buildGrid(6); buildHumidityGrid(); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
 try { showPage(localStorage.getItem('scs_page') || 'dash'); } catch { showPage('dash'); }
 fbConnect();
+setInterval(refreshTelemetry,1000);
 setInterval(() => { updateSchedHint(); updateModeInfo(); }, 30000);
 // Auto-prune berkala: slot kedaluwarsa hilang sendiri walau halaman dibiarkan terbuka.
 // Hanya jalan bila user tidak sedang mengetik (biar tidak ganggu edit) + mode jadwal aktif.
 setInterval(() => {
-  if (curAutoSrc() !== 'schedule') return;
+   if (!fbConnected || !controlLoaded || !transportConnected || curAutoSrc() !== 'schedule') return;
   const ae = document.activeElement;
   if (ae && ae.tagName === 'INPUT') return;
   const fresh = SCS.prunePastSlots(schedSlots(), Date.now());

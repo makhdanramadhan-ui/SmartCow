@@ -1,60 +1,85 @@
-# 🐄 Smart Cow Sprinkler System
+# 🐄 SmartCow — monitoring kandang & sprinkler
 
-Web monitoring + kontrol penyemprot kandang sapi otomatis berbasis suhu (6× DS18B20, satu bus OneWire). Backend: Firebase Hosting + Realtime Database.
+Dashboard **6 DS18B20 + 4 DHT22**, dua ESP32, satu device Firebase `cow-sprinkler-01`.
 
-## 1. Wiring (lo hardware dulu)
+- **ESP kiri:** 3 DS + 2 DHT → ESP-NOW → kanan.
+- **ESP kanan:** 3 DS + 2 DHT lokal, agregasi kedua sisi, relay GPIO23, Wi-Fi/Firebase.
+- Suhu rata-rata dan kontrol sprinkler hanya dari **DS18B20**. DHT memasok %RH dan suhu pembanding; tidak mengontrol relay. THI belum diaktifkan karena pasangan lokasi DS–DHT belum ditentukan.
 
-| Komponen | Pasang |
-|---|---|
-| 6× DS18B20, kabel kuning DQ | Gabung semua ke **GPIO4** |
-| Resistor 4.7kΩ | Antara DQ dan 3V3 (wajib, satu saja) |
-| Kabel merah / hitam | 3V3 / GND (power eksternal, bukan parasite) |
-| SSR IN | **GPIO23** + GND |
-| Solenoid valve AC 220V | Via SSR + steker mitra. HATI-HATI tegangan tinggi |
+## Wiring FINAL
 
-## 2. Flash firmware (Arduino IDE)
+| Sinyal | ESP kanan | ESP kiri |
+|---|---|---|
+| DS pertama | GPIO4 → DS1 | GPIO4 → DS4 |
+| DS kedua | GPIO14 → DS2 | GPIO14 → DS5 |
+| DS ketiga | GPIO18 → DS3 | GPIO18 → DS6 |
+| DHT pertama | GPIO19 → DHT1 | GPIO19 → DHT3 |
+| DHT kedua | GPIO25 → DHT2 | GPIO25 → DHT4 |
+| SSR IN | GPIO23 | Tidak dipasang |
 
-1. Install board `esp32` (Espressif) via Boards Manager, pilih **ESP32 Dev Module**.
-2. Install via Library Manager: **OneWire** (Paul Stoffregen) + **DallasTemperature** (Miles Burton). Tidak perlu library Firebase.
-3. Buka `firmware/smart-cow-sprinkler-firebase.ino`, isi 4 nilai atas: `WIFI_SSID`, `WIFI_PASSWORD`, `DATABASE_URL`, `DATABASE_SECRET` (lihat langkah 3).
-4. Upload, buka Serial Monitor **115200**. Harus muncul `Sensor terdeteksi: 6` + `Terkirim avg=...` tiap 2 detik.
-5. Kalau sensor kurang dari 6: cek pull-up, power 3V3, dan sambungan DQ.
-6. Untuk petakan S1..S6 ke posisi fisik: set `SCAN_ADDRESSES true` sekali, catat ROM dari Serial, kembalikan ke false.
+VCC sensor **3V3**, GND lokal masing-masing ESP. Setiap DATA DS punya pull-up fisik **4,7 kΩ** sendiri. DATA DHT memakai pull-up **4,7–10 kΩ** ke 3V3 bila belum ada pada modul. **GPIO20 tidak tersedia pada ESP32 klasik/WROOM-32.** GPIO21/22/26 tetap tersedia untuk rencana mic, belum ada kode mic.
 
-## 3. Firebase Console (sekali saja)
+Cabut daya sebelum memindahkan jack/sensor. **Uji tanpa beban AC terlebih dahulu; pengerjaan 220 V harus oleh orang kompeten.** Detail wiring, pairing radio, library, dan checklist di [panduan firmware](firmware/smart-cow-sprinkler-firebase/README-DUA-ESP.md).
 
-1. Buat project di console.firebase.google.com. Buat **Realtime Database** (region asia-southeast1), mulai dengan **locked mode**.
-2. Tab **Rules**: tempel isi `database.rules.json`, Publish.
-3. Project Overview > Add app > Web, salin config ke `js/firebase-config.js` (contoh di `js/firebase-config.example.js`).
-4. Build > Authentication > Sign-in method > aktifkan **Email/Password**, tambah user demo. Email + password itu yang diisi di `js/firebase-config.js`.
-5. Project Settings > Service accounts > **Database secrets** > salin secret ke firmware (langkah 2). Secret ini sensitif: jangan sebar file .ino.
+## Upload firmware
 
-## 4. Jalanin web
+1. Arduino IDE: board **ESP32 Dev Module**. Library **OneWire**, **DallasTemperature**, **DHT sensor library (Adafruit)**, **Adafruit Unified Sensor**, dan **ArduinoJson v7** untuk kanan.
+2. Buka `firmware/smart-cow-sprinkler-firebase/espkanan_FINAL/espkanan_FINAL.ino`. Pertahankan/isi konfigurasi Wi-Fi dan Firebase lokal, samakan `ESPNOW_CHANNEL` dengan kanal tetap router 2,4 GHz.
+3. Upload kanan, buka Serial Monitor **115200**, catat MAC STA kanan.
+4. Isi `RIGHT_MAC` pada `firmware/smart-cow-sprinkler-firebase/espkiri_FINAL/espkiri_FINAL.ino`, samakan kanal, upload kiri.
+5. Pastikan ACK diterima, DS **6/6** dan RH **4/4**. Uji kehilangan sensor/link sebelum menghubungkan solenoid.
 
-- Lokal: double-click `index.html` (mode Simulasi langsung jalan, tanpa internet).
-- Live ESP32: klik tombol **Firebase** di kartu Sumber Data. Web login akun demo, listen `devices/cow-sprinkler-01/telemetry/latest`, kirim perintah ke `.../control`.
-- Online via Hosting: `npm install -g firebase-tools`, `firebase login`, isi project id di `.firebaserc`, `firebase deploy --only hosting,database`.
+Setiap sketch berada di folder sendiri. FINAL memakai paket **v3, 56 byte**; jangan dipasangkan dengan DS-only atau versi AHT lama. Varian DS-only, tes DHT mandiri, dan firmware legacy tetap terpisah; tes DHT mandiri memakai GPIO4/14, **bukan pin FINAL**.
 
-## 5. Struktur data RTDB
+## Dashboard & Firebase
 
-```
-devices/cow-sprinkler-01/telemetry/latest  (ESP32 tulis tiap 2 dtk, web listen; ada flag sch)
-devices/cow-sprinkler-01/telemetry/log/{id} (tiap 30 dtk, web baca 120 terakhir)
-devices/cow-sprinkler-01/control            (web tulis, ESP32 baca tiap 5 dtk:
-  mode, manualSsr, threshold, hysteresis, maxDuration, cooldown,
-  schOn, schStart "HH:MM", schDur menit)
-devices/cow-sprinkler-01/events/{id}        (bukti ON/OFF, ditulis ESP32 + web)
-devices/cow-sprinkler-01/status             (heartbeat ESP32 tiap 30 dtk)
-```
+Alamat Hosting: **https://smartcow-de25f.web.app**. Login memakai akun **Firebase Authentication Email/Password yang sudah dibuat**, bukan akun Google/Firebase Console kecuali email itu memang didaftarkan sebagai user Authentication.
 
-## 6. File
+- Konfigurasi publik ada di `js/firebase-public.js`: API key project bukan password akun. Password dimasukkan melalui formulir login; tidak dibundel di website.
+- `js/firebase-config.js` lokal lama dipertahankan tetapi **tidak dimuat/dipublikasikan**.
+- UI menampilkan 6 kartu DS dan 4 kartu DHT secara tetap, node kanan/kiri, validitas, rata-rata, grafik suhu/RH, riwayat 120 baris, dan CSV.
+- Sensor hilang/stale ditampilkan **—**, bukan nol. LIVE membutuhkan telemetry terkini; relay offline ditampilkan **belum diketahui**, bukan diasumsikan OFF.
+- Login/reload tidak menimpa control Firebase dengan konfigurasi browser. Web mengirim pengaturan/perintah, **ESP kanan sendiri** menjalankan kontrol lokal; menutup browser tidak mematikan otomatisasi.
 
-```
-index.html  css/style.css  js/core.js  js/app.js  js/config.js
-js/firebase.js  js/firebase-config.js  test/core.test.js (node --test test/)
-firmware/smart-cow-sprinkler-firebase.ino  firmware/smart-cow-sprinkler.ino (MQTT lama)
-firebase.json  .firebaserc  database.rules.json
-docs/firebase-research.md  docs/adr/  CONTEXT.md  PRODUCT.md
+Untuk preview lokal gunakan server HTTP, misalnya `python -m http.server 8080`; buka `http://localhost:8080`. Bukan mode simulasi, dan SDK/login membutuhkan internet.
+
+### Deploy
+
+```sh
+node scripts/prepare-hosting.cjs
+firebase deploy --only hosting,database --project smartcow-de25f
 ```
 
-Logika relay identik di web (`js/core.js`, ter-test) dan firmware: mode otomatis eksklusif, pilih salah satu — (a) **suhu**: ON saat avg ≥ threshold, OFF saat avg ≤ threshold − hysteresis (+ proteksi durasi maks & cooldown); (b) **jadwal**: daftar maks 6 slot bertanggal `{tanggal, jam mulai WIB, lama nyala menit}`, tiap slot jalan hanya di tanggalnya (khusus hari ini jam min = sekarang+1 mnt), slot kedaluwarsa auto-hapus. Tambahan: mode manual mengunci ke tombol.
+Hosting hanya memuat hasil salinan allowlist di `public/`, bukan seluruh repository. Firmware, konfigurasi login lama, dan secrets tidak ikut. Rules tetap mewajibkan autentikasi; mendukung telemetry FINAL dengan nol DS valid dan `avg` tidak ada, tanpa rata-rata palsu. Deploy rules tidak mengubah data/control perangkat.
+
+## Kontrak data
+
+```text
+devices/cow-sprinkler-01/
+  telemetry/latest       sekitar 2 detik jika koneksi lancar
+  telemetry/log/{id}     sekitar 30 detik, ESP kanan yang menulis
+  control                dibaca ESP kanan sekitar 5 detik
+  events/{id}
+  status                 heartbeat sekitar 30 detik
+```
+
+- `t1`–`t6`, `avg`, `validMask`, `validCount`, `complete`, `temperatureAgeMs`: suhu DS; bit 0–5 = DS1–DS6.
+- `h1`–`h4`, `humidityAvg`, `humidityValidMask`, `humidityValidCount`, `humidityComplete`, `humidityAgeMs`: RH; bit 0–3 = DHT1–DHT4.
+- `d1`–`d4`: suhu DHT untuk pembanding, tidak masuk `avg` DS.
+- `leftOnline`, `leftAgeMs`, `ssr`, `mode`, `autoSrc`, `schemaVersion=3`, `measuredTs`, `ts`.
+- Nilai suhu DS invalid bisa masih berupa angka terakhir/-127 di database; **mask + usia** menentukan kelayakan, bukan angka saja. RH invalid/null hilang dari RTDB; jangan ubah field hilang menjadi 0%RH.
+
+## Kontrol & batas pilot
+
+- **Auto suhu:** wajib 6/6 DS valid/fresh. Kurang satu DS atau kiri stale → relay OFF. Default threshold 30 °C, hysteresis 1 °C, maksimum 120 detik, cooldown 60 detik.
+- **Manual:** ON sampai perintah OFF, termasuk saat internet putus. **Jadwal:** mengikuti durasi slot dengan waktu NTP. Manual/jadwal tidak memakai syarat kelengkapan suhu atau proteksi maksimum/cooldown auto suhu.
+- Boot relay OFF, konfigurasi default sampai Firebase control terbaca; belum ada penyimpanan pengaturan tahan reboot.
+- Radio 15 m, kualitas RH, kabel, dan keselamatan kelistrikan belum diuji di kandang. TLS `setInsecure()`, Database Secret legacy, serta ESP-NOW tanpa enkripsi masih batas pilot, bukan desain produksi. Rotasi kredensial yang pernah terbagikan; jangan commit secret lokal.
+
+## Verifikasi
+
+```sh
+node --test test/core.test.js test/telemetry.test.js
+```
+
+35 unit test mencakup kontrol lama dan normalisasi/freshness DS–DHT. FINAL kanan/kiri berhasil dikompilasi sebagai `.ino` untuk `esp32dev`, Arduino-ESP32 **2.0.17**, OneWire 2.3.8, DallasTemperature 4.0.6, DHT 1.4.7, Unified Sensor 1.1.15, ArduinoJson 7.4.3. Cabang callback core 3.x tersedia tetapi belum dikompilasi pada core 3.x. Uji browser/emulator bukan pengganti upload dan uji perangkat nyata.

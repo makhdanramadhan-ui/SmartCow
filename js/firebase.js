@@ -1,70 +1,62 @@
-// Bridge Firebase (ES module). Diimpor via <script type="module"> di index.html.
-// SDK modular gstatic 12.19.0, sesuai riset docs/firebase-research.md.
-// Mengekspos window.SCSFirebase agar skrip klasik app.js bisa memakai.
+// Firebase bridge: autentikasi pengguna, satu writer telemetry (ESP kanan).
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
-import { getDatabase, ref, onValue, off, set, update, push, query, orderByChild, limitToLast, get, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js';
-import { getAuth, signInWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import { getDatabase, ref, onValue, update, push, query, orderByChild, limitToLast, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js';
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 
-let db = null, unsubs = [], authed = false;
-const dev = () => (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.deviceId) || 'cow-sprinkler-01';
-const base = () => `devices/${dev()}`;
-
-function cfgOk() {
-  const c = window.FIREBASE_CONFIG || {};
-  return c.apiKey && c.databaseURL && c.email && c.password;
-}
-
-async function connect({ onStatus, onTelemetry, onSeedLogs }) {
-  if (!cfgOk()) throw new Error('isi dulu js/firebase-config.js (lihat firebase-config.example)');
-  if (!db) {
-    const c = window.FIREBASE_CONFIG;
-    const app = getApps().length ? getApps()[0] : initializeApp({ apiKey: c.apiKey, authDomain: c.authDomain, databaseURL: c.databaseURL, projectId: c.projectId });
-    onStatus && onStatus('Login akun demo…', 'sim');
-    await signInWithEmailAndPassword(getAuth(app), c.email, c.password);
-    authed = true;
-    db = getDatabase(app);
-  }
-  onStatus && onStatus('Terhubung! Menunggu telemetri ESP32 di ' + base() + '/telemetry/latest', 'live');
-  const latestRef = ref(db, base() + '/telemetry/latest');
-  const cb = (snap) => {
-    const v = snap.val();
-    if (!v) { onStatus && onStatus('Terhubung, tapi ESP32 belum kirim data. Cek firmware + WiFi.', 'live'); return; }
-    onTelemetry && onTelemetry({ s: [v.t1, v.t2, v.t3, v.t4, v.t5, v.t6], avg: v.avg, ssr: v.ssr, sch: v.sch, n: v.n });
-  };
-  onValue(latestRef, cb);
-  unsubs.push(() => off(latestRef, 'value', cb));
-  try {
-    const q = query(ref(db, base() + '/telemetry/log'), orderByChild('ts'), limitToLast(120));
-    const snap = await get(q);
+let db, auth, callbacks = {}, unsubs = [], timeOffset = 0;
+const base = () => `devices/${window.FIREBASE_CONFIG?.deviceId || 'cow-sprinkler-01'}`;
+function stopListeners() { unsubs.forEach((fn) => fn()); unsubs = []; }
+function listen() {
+  stopListeners();
+  const failed = () => callbacks.onStatus?.('Akses data ditolak. Periksa akun/rules Firebase.', 'err');
+  unsubs.push(onValue(ref(db, '.info/serverTimeOffset'), (snap) => { timeOffset = snap.val() || 0; }));
+  unsubs.push(onValue(ref(db, '.info/connected'), (snap) => callbacks.onTransport?.(snap.val() === true)));
+  unsubs.push(onValue(ref(db, base() + '/telemetry/latest'), (snap) => callbacks.onTelemetry?.(snap.val()), failed));
+  unsubs.push(onValue(ref(db, base() + '/control'), (snap) => callbacks.onControl?.(snap.val()), failed));
+  unsubs.push(onValue(query(ref(db, base() + '/events'), orderByChild('ts'), limitToLast(50)), (snap) => {
     const rows = [];
-    snap.forEach((ch) => {
-      const v = ch.val();
-      rows.push({ t: v.ts, s: [v.t1, v.t2, v.t3, v.t4, v.t5, v.t6], avg: v.avg, spray: v.ssr ? 1 : 0 });
+    snap.forEach((child) => {
+      const event = child.val();
+      if (event && typeof event.ts === 'number') rows.push({ t: event.ts, msg: String(event.reason || event.type || 'Event perangkat') });
     });
-    onSeedLogs && onSeedLogs(rows.reverse());
-  } catch (e) { /* log lama opsional, abaikan */ }
-  return true;
+    callbacks.onEvents?.(rows.reverse());
+  }, failed));
+  unsubs.push(onValue(query(ref(db, base() + '/telemetry/log'), orderByChild('ts'), limitToLast(120)), (snap) => {
+    const rows = [];
+    snap.forEach((child) => { const raw = child.val(); if (raw && typeof raw.ts === 'number') rows.push(SCSTelemetry.logRow(raw)); });
+    callbacks.onSeedLogs?.(rows.reverse());
+  }, failed));
 }
-
-function disconnect() { unsubs.forEach((u) => { try { u(); } catch {} }); unsubs = []; }
-function needDb() { if (!db || !authed) throw new Error('Firebase belum terhubung'); }
-
+async function connect(handlers) {
+  callbacks = handlers;
+  if (auth) return;
+  const c = window.FIREBASE_CONFIG;
+  if (!c?.apiKey || !c?.databaseURL) throw new Error('Konfigurasi Firebase publik belum lengkap.');
+  const app = getApps()[0] || initializeApp(c);
+  db = getDatabase(app);
+  auth = getAuth(app);
+  onAuthStateChanged(auth, (user) => {
+    callbacks.onAuth?.(!!user, user?.email || '');
+    if (user) listen();
+    else { stopListeners(); callbacks.onTelemetry?.(null); }
+  });
+}
+async function login(email, password) {
+  if (!auth) throw new Error('Firebase belum siap.');
+  return signInWithEmailAndPassword(auth, email, password);
+}
+function needDb() { if (!auth?.currentUser) throw new Error('Login terlebih dahulu.'); }
 function pushControl(obj) {
   needDb();
   return update(ref(db, base() + '/control'), { ...obj, updatedAt: serverTimestamp(), updatedBy: 'web' });
 }
-function pushOverride(on, reason) {
-  needDb();
-  update(ref(db, base() + '/control'), { manualSsr: on ? 'on' : 'off', updatedAt: serverTimestamp(), updatedBy: 'web' });
-  return push(ref(db, base() + '/events'), { type: on ? 'manual_on' : 'manual_off', reason: reason || '', ts: serverTimestamp() });
-}
-function pushLog(row) {
-  needDb();
-  return push(ref(db, base() + '/telemetry/log'), { t1: row.s[0], t2: row.s[1], t3: row.s[2], t4: row.s[3], t5: row.s[4], t6: row.s[5], avg: row.avg, ssr: row.spray ? 1 : 0, ts: row.t });
+async function pushOverride(on, reason) {
+  await pushControl({ manualSsr: on ? 'on' : 'off' });
+  return pushEvent(reason || (on ? 'Manual ON diminta' : 'Manual OFF diminta'));
 }
 function pushEvent(msg) {
   needDb();
   return push(ref(db, base() + '/events'), { type: 'web', reason: msg, ts: serverTimestamp() });
 }
-
-window.SCSFirebase = { connect, disconnect, pushControl, pushOverride, pushLog, pushEvent };
+window.SCSFirebase = { connect, login, logout: () => signOut(auth), pushControl, pushOverride, pushEvent,
+  now: () => Date.now() + timeOffset };
