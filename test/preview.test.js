@@ -12,8 +12,25 @@ test('unauthenticated HTML fails closed without waiting for JavaScript', () => {
   assert.match(shell, /\bhidden\b/);
   assert.match(shell, /\binert\b/);
   assert.match(html, /<main\b[^>]*id="authPanel"/);
+  const login = html.match(/<main\b[^>]*id="authPanel"[^>]*>/)?.[0];
+  assert.match(login, /\bhidden\b/);
+  assert.match(login, /\binert\b/);
+  assert.match(html, /id="sessionPanel"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-busy="true"/);
   assert.match(html, /id="loginEmail"[^>]*type="email"[^>]*autocomplete="username"/);
   assert.match(html, /id="loginPassword"[^>]*type="password"[^>]*autocomplete="current-password"/);
+});
+
+test('session restoration waits for Firebase rather than a local login flag', () => {
+  const app = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
+  const firebase = fs.readFileSync(path.join(root, 'js/firebase.js'), 'utf8');
+  assert.match(app, /function setAuthView\(ok, email=''\)\{\s*authResolved=true;/);
+  assert.match(app, /\$\('sessionPanel'\)\.hidden=true/);
+  assert.match(app, /\$\('authPanel'\)\.inert=ok/);
+  assert.match(app, /onAuth: \(ok, email\)=>\{[\s\S]*?setAuthView\(ok, email\)/);
+  assert.match(app, /sessionWaitTimer=setTimeout\(sessionFailed,15000\)/);
+  assert.match(firebase, /onAuthStateChanged\(auth,/);
+  assert.match(firebase, /callbacks\.onAuthError\?\.\(error\)/);
+  assert.doesNotMatch(app, /(?:localStorage|sessionStorage)\.(?:getItem|setItem)\(['"](?:loggedIn|authenticated|scs_auth)/);
 });
 
 test('redesigned page has unique IDs and retains core control elements', () => {
@@ -77,7 +94,7 @@ test('preview HTTP server serves only runtime assets and refuses writes/private 
   assert.equal(page.headers.get('cache-control'), 'no-store');
   assert.match(await page.text(), /id="appShell" class="app-shell" hidden inert/);
   assert.equal((await fetch(origin + '/assets/farm-scene.svg')).status, 200);
-  assert.equal((await fetch(origin + '/js/app.js?v=37')).status, 200);
+  assert.equal((await fetch(origin + '/js/app.js?v=38')).status, 200);
   const head = await fetch(origin + '/index.html', { method: 'HEAD' });
   assert.equal(head.status, 200); assert.equal(await head.text(), '');
   for (const name of ['/.git/config', '/js/firebase-config.js', '/database.rules.json',

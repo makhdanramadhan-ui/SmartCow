@@ -766,12 +766,22 @@ function updateSchedHint(){
   const daftar = slots.map((s) => SCS.formatIDSlot(s)).join(', ');
   el.textContent = `${basisName(CFG)} · ${slots.length} jendela: ${daftar}. ` + (run ? 'JENDELA AKTIF, bukan paksa ON. ' : (nx ? `Berikutnya ${SCS.formatIDSlot(nx)}. ` : '')) + `Tetap mengikuti threshold ${CFG.threshold}${basisUnit(CFG)}, hysteresis, durasi maks dan cooldown.`;
 }
-let fbTries = 0;
+let fbTries = 0, authResolved=false, sessionWaitTimer=null;
+function sessionStatus(message, failed=false){
+  if (authResolved) return;
+  $('sessionMessage').textContent=message;
+  $('sessionPanel').setAttribute('aria-busy',String(!failed));
+  $('sessionRetry').hidden=!failed;
+}
+function sessionFailed(){
+  sessionStatus('Sesi belum dapat diperiksa. Periksa koneksi internet lalu coba muat ulang.',true);
+}
 // fbStatus hanya tampil saat belum live (sim/error) biar tampilan clean.
 function setFbStatus(msg, kind){
   const el = $('fbStatus'); if (!el) return;
   el.textContent = msg || '';
   el.dataset.kind = kind || 'login';
+  if (!authResolved && msg) sessionStatus(kind==='err' ? 'Sesi belum dapat diperiksa. Periksa koneksi internet lalu coba muat ulang.' : msg,kind==='err');
   const notice=$('connectionNotice');
   notice.textContent=kind==='err' && fbConnected ? msg : '';
   notice.hidden=!notice.textContent;
@@ -783,10 +793,17 @@ function accountNameOf(email){
   return at > 0 ? email.slice(0,at).trim() || 'Pengelola' : 'Pengelola';
 }
 function setAuthView(ok, email=''){
+  authResolved=true;
+  clearTimeout(sessionWaitTimer);
+  $('sessionPanel').hidden=true;
+  $('sessionPanel').setAttribute('aria-busy','false');
   if (!ok){ closeSensors(false); closeSide(); closePicker(); closeConfirm(false); }
+  const nextView=ok ? $('appShell') : $('authPanel');
+  if (nextView.hidden){ nextView.classList.remove('view-in'); void nextView.offsetWidth; nextView.classList.add('view-in'); }
   $('appShell').hidden=!ok;
   $('appShell').inert=!ok;
   $('authPanel').hidden=ok;
+  $('authPanel').inert=ok;
   $('btnLogout').hidden=!ok;
   $('accountEmail').textContent=ok ? email || 'Akun terautentikasi' : 'Akun terautentikasi';
   const name=ok ? accountNameOf(email) : 'Pengelola';
@@ -820,7 +837,7 @@ function fbConnect(){
     fbTries++;
     setFbStatus(fbTries > 12
       ? 'SDK login belum termuat. Periksa internet dan akses gstatic.com, lalu muat ulang. Untuk preview lokal, gunakan http://localhost, bukan file://.'
-      : 'Memuat Firebase SDK…', 'sim');
+      : 'Memuat Firebase SDK…', fbTries>12 ? 'err' : 'sim');
     setTimeout(()=>{ if (!fbConnected) fbConnect(); }, 800);
     return;
   }
@@ -828,6 +845,7 @@ function fbConnect(){
   SCSFirebase.connect({
     onStatus: (msg, kind)=>{ setFbStatus(msg, kind); setConn(kind); },
     onTransport: (online)=>{ transportConnected=online; syncButtons(); refreshTelemetry(); },
+    onAuthError: ()=>{ sessionFailed(); setFbStatus('Sesi tidak dapat diperiksa. Periksa koneksi lalu muat ulang.','err'); },
     onAuth: (ok, email)=>{
       fbConnected=ok;
       $('btnLogin').disabled=false;
@@ -857,7 +875,7 @@ function fbConnect(){
     onSeedLogs: (rows)=>{ if (!fbConnected) return; logs = SCS.pruneLogs(rows, 120); localStorage.setItem('scs_logs', JSON.stringify(logs)); renderLogs(); },
     onEvents: (rows)=>{ if (!fbConnected) return; events=rows; renderEvents(); }
   })
-    .catch((e)=>{ setFbStatus('Firebase: ' + e.message, 'err'); setConn('err'); });
+    .catch((e)=>{ sessionFailed(); setFbStatus('Firebase: ' + e.message, 'err'); setConn('err'); });
 }
 function setConn(kind){
   const b = $('connBadge');
@@ -941,6 +959,8 @@ $('btnAddSched').onclick = ()=>{
 
 // ---------- SIDEBAR, SENSOR DETAIL + HALAMAN (dashboard / log / event) ----------
 function mobileNavigation(){ return window.matchMedia('(max-width: 980px)').matches; }
+function reducedMotion(){ return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+let sideOverlayTimer=null;
 function syncScrollLock(){
   const drawer=$('sidebar').classList.contains('open') && mobileNavigation();
   document.body.style.overflow=drawer || $('sensorDialog').open ? 'hidden' : '';
@@ -957,17 +977,35 @@ function setSide(open){
   $('menuBtn').setAttribute('aria-expanded',String(open));
   $('menuBtn').setAttribute('aria-label',open ? 'Tutup navigasi' : 'Buka navigasi');
   const drawer=open && mobileNavigation();
-  $('sideOverlay').hidden=!drawer;
-  $('sideOverlay').classList.toggle('show',drawer);
+  clearTimeout(sideOverlayTimer);
+  const overlay=$('sideOverlay');
+  if (drawer){
+    overlay.hidden=false;
+    void overlay.offsetWidth;
+    overlay.classList.add('show');
+  } else {
+    overlay.classList.remove('show');
+    if (!fbConnected || reducedMotion()) overlay.hidden=true;
+    else sideOverlayTimer=setTimeout(()=>{ if (!$('sidebar').classList.contains('open') || !mobileNavigation()) overlay.hidden=true; },300);
+  }
   syncScrollLock();
-  if (drawer && (!wasOpen || document.querySelector('.workspace').contains(document.activeElement))) $('sideClose').focus();
+  if (drawer && (!wasOpen || document.querySelector('.workspace').contains(document.activeElement))) requestAnimationFrame(()=>{
+    if (fbConnected && sb.classList.contains('open') && mobileNavigation()) $('sideClose').focus();
+  });
   requestAnimationFrame(drawChart);
 }
 function openSide(){ closeSensors(false); closePicker(); setSide(true); }
 function closeSide(){ const wasOpen=$('sidebar').classList.contains('open'); setSide(false); if(wasOpen && fbConnected) $('menuBtn').focus(); }
-let sensorReturnFocus=null;
+let sensorReturnFocus=null, sensorCloseTimer=null, sensorCloseHandler=null;
+function cancelSensorClose(){
+  clearTimeout(sensorCloseTimer);
+  if (sensorCloseHandler) $('sensorDialog').removeEventListener('animationend',sensorCloseHandler);
+  sensorCloseHandler=null;
+  $('sensorDialog').classList.remove('is-closing');
+}
 function openSensors(kind, trigger){
   if (!fbConnected || !['temperature','humidity'].includes(kind)) return;
+  cancelSensorClose();
   closeSide(); closePicker();
   sensorReturnFocus=trigger;
   $('sensorDialogTitle').textContent=kind==='temperature' ? 'Detail 6 sensor suhu DS18B20' : 'Detail 4 sensor kelembapan DHT22';
@@ -979,22 +1017,36 @@ function openSensors(kind, trigger){
   $('btnCloseSensors').focus();
 }
 function closeSensors(restoreFocus=true){
-  if (!$('sensorDialog').open) return;
-  $('sensorDialog').close();
-  document.querySelectorAll('[data-sensor-panel]').forEach(panel=>{ panel.hidden=true; });
-  syncScrollLock();
-  if (restoreFocus && fbConnected && sensorReturnFocus?.isConnected) sensorReturnFocus.focus({preventScroll:true});
-  sensorReturnFocus=null;
+  const dialog=$('sensorDialog');
+  if (!dialog.open) return;
+  if (dialog.classList.contains('is-closing') && restoreFocus) return;
+  cancelSensorClose();
+  const finish=()=>{
+    cancelSensorClose();
+    dialog.close();
+    document.querySelectorAll('[data-sensor-panel]').forEach(panel=>{ panel.hidden=true; });
+    syncScrollLock();
+    if (restoreFocus && fbConnected && sensorReturnFocus?.isConnected) sensorReturnFocus.focus({preventScroll:true});
+    sensorReturnFocus=null;
+  };
+  // Logout/navigation close immediately: private data must never linger for an exit effect.
+  if (!restoreFocus || !fbConnected || reducedMotion()){ finish(); return; }
+  sensorCloseHandler=e=>{ if(e.target===dialog && e.animationName==='sensor-dialog-out') finish(); };
+  dialog.addEventListener('animationend',sensorCloseHandler);
+  dialog.classList.add('is-closing');
+  sensorCloseTimer=setTimeout(finish,240); // Safe fallback if the browser cancels animationend.
 }
 function showPage(p){
   closeSensors(false);
   if (p !== 'log' && p !== 'event') p = 'dash';
+  let pageIndex=0;
   document.querySelectorAll('main.container > section').forEach((s) => {
     var show = (!s.dataset.page || s.dataset.page === p);
     if (show){
       s.style.display = '';
       // fade-in halus tiap ganti halaman (re-trigger paksa biar animasi jalan tiap klik)
       s.classList.remove('page-in');
+      s.style.setProperty('--page-delay',`${Math.min(pageIndex++ * 40,160)}ms`);
       void s.offsetWidth;
       s.classList.add('page-in');
     } else {
@@ -1049,9 +1101,11 @@ document.querySelectorAll('.side-link').forEach((b) => { b.addEventListener('cli
 history=[]; logs=[]; events=[]; // tidak menyajikan cache lama sebagai data live sebelum login
 buildGrid(6); buildHumidityGrid(); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
 try { showPage(localStorage.getItem('scs_page') || 'dash'); } catch { showPage('dash'); }
-document.title='Masuk — SmartCow';
+document.title='Memuat — SmartCow';
 $('localPreviewNotice').hidden=!['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname);
 window.addEventListener('resize',()=>setSide($('sidebar').classList.contains('open')));
+document.querySelector('.workspace').addEventListener('transitionend',e=>{ if(e.target===e.currentTarget && e.propertyName==='margin-left') drawChart(); });
+sessionWaitTimer=setTimeout(sessionFailed,15000);
 fbConnect();
 setInterval(refreshTelemetry,1000);
 setInterval(() => { updateSchedHint(); updateModeInfo(); }, 30000);

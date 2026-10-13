@@ -39,7 +39,7 @@ async function connect(handlers) {
     callbacks.onAuth?.(!!user, user?.email || '');
     if (user) listen();
     else { stopListeners(); callbacks.onTelemetry?.(null); }
-  });
+  }, (error) => callbacks.onAuthError?.(error));
 }
 async function login(email, password) {
   if (!auth) throw new Error('Firebase belum siap.');

@@ -5,9 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#214d3c" />
   <meta name="description" content="SmartCow — ruang kendali iklim kandang, monitoring sensor, dan sprinkler." />
-  <title>SmartCow — Ruang Kendali Kandang</title>
+  <title>Memuat — SmartCow</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23214d3c'/%3E%3Ctext x='9' y='46' font-size='43'%3E%F0%9F%90%84%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="css/style.css?v=37" />
+  <script>
+  try { document.documentElement.dataset.theme = localStorage.getItem('scs_theme') === 'dark' ? 'dark' : 'light'; } catch {}
+  </script>
+  <link rel="stylesheet" href="css/style.css?v=38" />
 </head>
 <body>
 <!-- Local icon set: no remote font or icon library required. -->
@@ -32,8 +35,11 @@
   <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 4H4v16h6M9 12h12m-5-5 5 5-5 5"/></symbol>
 </svg>
 
-<!-- Auth-first: appShell starts hidden even if JavaScript/SDK fails to load. -->
-<main id="authPanel" class="auth-page" aria-labelledby="loginTitle">
+<!-- Neither login nor private content is shown until Firebase resolves the session. -->
+<div id="sessionPanel" class="session-panel" role="status" aria-live="polite" aria-busy="true">
+  <div class="session-card"><span class="session-brand"><svg class="icon"><use href="#i-barn"/></svg> smartcow<span>.</span></span><span class="session-loader" aria-hidden="true"></span><h1>Menyiapkan ruang kendali</h1><p id="sessionMessage">Memulihkan sesi dengan aman…</p><a id="sessionRetry" class="btn" href="./" hidden>Coba muat ulang</a></div>
+</div>
+<main id="authPanel" class="auth-page" aria-labelledby="loginTitle" hidden inert>
   <section class="auth-story" aria-label="Tentang SmartCow">
     <a class="wordmark auth-brand" href="./" aria-label="SmartCow, halaman masuk"><span class="brand-mark"><svg class="icon"><use href="#i-barn"/></svg></span><span>smartcow<span class="brand-period">.</span></span></a>
     <div class="auth-story-copy">
@@ -145,20 +151,24 @@
   <div id="confirmOverlay" class="confirm-overlay" hidden><div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMsg"><div class="confirm-icon"><svg class="icon"><use href="#i-history"/></svg></div><div id="confirmTitle">Yakin?</div><div id="confirmMsg" class="hint"></div><div class="confirm-actions"><button id="confirmNo" class="btn">Batal</button><button id="confirmYes" class="btn red">Ya, hapus</button></div></div></div>
 </div>
 
-<script src="js/core.js?v=37"></script>
-<script src="js/control.js?v=37"></script>
-<script src="js/telemetry.js?v=37"></script>
-<script src="js/config.js?v=37"></script>
-<script src="js/firebase-public.js?v=37"></script>
+<script src="js/core.js?v=38"></script>
+<script src="js/control.js?v=38"></script>
+<script src="js/telemetry.js?v=38"></script>
+<script src="js/config.js?v=38"></script>
+<script src="js/firebase-public.js?v=38"></script>
 <script>
 window.addEventListener('error', function (e) {
-  if (!window.SCSFirebase && e.message && e.message !== 'Script error.') {
+  if (!window.SCSFirebase && ((e.message && e.message !== 'Script error.') || e.target?.tagName === 'SCRIPT')) {
     var el = document.getElementById('fbStatus');
     if (el) el.textContent = 'Tidak dapat memuat aplikasi. Coba muat ulang dan periksa koneksi internet.';
+    var message = document.getElementById('sessionMessage'), panel = document.getElementById('sessionPanel'), retry = document.getElementById('sessionRetry');
+    if (message) message.textContent = 'Tidak dapat memuat aplikasi. Periksa koneksi internet lalu coba muat ulang.';
+    if (panel) panel.setAttribute('aria-busy', 'false');
+    if (retry) retry.hidden = false;
   }
 }, true);
 </script>
-<script type="module" src="js/firebase.js?v=37"></script>
-<script src="js/app.js?v=37"></script>
+<script type="module" src="js/firebase.js?v=38"></script>
+<script src="js/app.js?v=38"></script>
 </body>
 </html>
