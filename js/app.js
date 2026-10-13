@@ -783,7 +783,7 @@ function accountNameOf(email){
   return at > 0 ? email.slice(0,at).trim() || 'Pengelola' : 'Pengelola';
 }
 function setAuthView(ok, email=''){
-  if (!ok){ closeSide(); closePicker(); closeConfirm(false); }
+  if (!ok){ closeSensors(false); closeSide(); closePicker(); closeConfirm(false); }
   $('appShell').hidden=!ok;
   $('appShell').inert=!ok;
   $('authPanel').hidden=ok;
@@ -939,33 +939,55 @@ $('btnAddSched').onclick = ()=>{
   markSettingsDirty(); syncButtons();
 };
 
-// ---------- SIDEBAR DRAWER + HALAMAN (dashboard / log / event) ----------
-// Animasi clean: tanpa display:none (pakai visibility di CSS) biar transisi
-// geser + fade overlay jalan mulus dua arah. Body dikunci scroll pas terbuka.
+// ---------- SIDEBAR, SENSOR DETAIL + HALAMAN (dashboard / log / event) ----------
+function mobileNavigation(){ return window.matchMedia('(max-width: 980px)').matches; }
+function syncScrollLock(){
+  const drawer=$('sidebar').classList.contains('open') && mobileNavigation();
+  document.body.style.overflow=drawer || $('sensorDialog').open ? 'hidden' : '';
+  document.querySelector('.workspace').inert=drawer;
+}
 function setSide(open){
-  open=!!open && fbConnected && window.matchMedia('(max-width: 980px)').matches;
+  open=!!open && fbConnected;
   var sb = $('sidebar'); if (!sb) return;
   const wasOpen=sb.classList.contains('open');
-  try { sb.style.display = ''; } catch {}
-  sb.classList.toggle('open', !!open);
-  const desktop=window.matchMedia('(min-width: 981px)').matches;
-  sb.setAttribute('aria-hidden', open || desktop ? 'false' : 'true');
-  sb.inert=!desktop && !open;
-  $('menuBtn').setAttribute('aria-expanded',String(!!open));
-  var ov = $('sideOverlay');
-  if (ov){
-    if (open){ ov.hidden = false; void ov.offsetWidth; ov.classList.add('show'); }
-    else {
-      ov.classList.remove('show');
-      setTimeout(function(){ if (!$('sidebar').classList.contains('open')) ov.hidden = true; }, 340);
-    }
-  }
-  try { document.body.style.overflow = open ? 'hidden' : ''; } catch {}
-  if (open && !wasOpen) $('sideClose').focus();
+  sb.classList.toggle('open',open);
+  $('appShell').classList.toggle('sidebar-open',open);
+  sb.setAttribute('aria-hidden',String(!open));
+  sb.inert=!open;
+  $('menuBtn').setAttribute('aria-expanded',String(open));
+  $('menuBtn').setAttribute('aria-label',open ? 'Tutup navigasi' : 'Buka navigasi');
+  const drawer=open && mobileNavigation();
+  $('sideOverlay').hidden=!drawer;
+  $('sideOverlay').classList.toggle('show',drawer);
+  syncScrollLock();
+  if (drawer && (!wasOpen || document.querySelector('.workspace').contains(document.activeElement))) $('sideClose').focus();
+  requestAnimationFrame(drawChart);
 }
-function openSide(){ setSide(true); }
+function openSide(){ closeSensors(false); closePicker(); setSide(true); }
 function closeSide(){ const wasOpen=$('sidebar').classList.contains('open'); setSide(false); if(wasOpen && fbConnected) $('menuBtn').focus(); }
+let sensorReturnFocus=null;
+function openSensors(kind, trigger){
+  if (!fbConnected || !['temperature','humidity'].includes(kind)) return;
+  closeSide(); closePicker();
+  sensorReturnFocus=trigger;
+  $('sensorDialogTitle').textContent=kind==='temperature' ? 'Detail 6 sensor suhu DS18B20' : 'Detail 4 sensor kelembapan DHT22';
+  document.querySelectorAll('[data-sensor-panel]').forEach(panel=>{ panel.hidden=panel.dataset.sensorPanel!==kind; });
+  renderSensors();
+  if (!$('sensorDialog').open) $('sensorDialog').showModal();
+  $('sensorDialog').scrollTop=0;
+  syncScrollLock();
+  $('btnCloseSensors').focus();
+}
+function closeSensors(restoreFocus=true){
+  if (!$('sensorDialog').open) return;
+  $('sensorDialog').close();
+  document.querySelectorAll('[data-sensor-panel]').forEach(panel=>{ panel.hidden=true; });
+  syncScrollLock();
+  if (restoreFocus && fbConnected && sensorReturnFocus?.isConnected) sensorReturnFocus.focus({preventScroll:true});
+  sensorReturnFocus=null;
+}
 function showPage(p){
+  closeSensors(false);
   if (p !== 'log' && p !== 'event') p = 'dash';
   document.querySelectorAll('main.container > section').forEach((s) => {
     var show = (!s.dataset.page || s.dataset.page === p);
@@ -992,7 +1014,7 @@ function showPage(p){
 // ---------- INIT (sumber tunggal: Firebase) ----------
 applyTheme(curTheme());
 $('themeBtn').onclick = ()=> applyTheme(curTheme() === 'light' ? 'dark' : 'light');
-$('menuBtn').addEventListener('click', openSide);
+$('menuBtn').addEventListener('click', ()=>{ if ($('sidebar').classList.contains('open')) closeSide(); else openSide(); });
 $('sideClose').addEventListener('click', (e) => { e.stopPropagation(); closeSide(); });
 $('sideOverlay').addEventListener('click', closeSide);
 // Pengaman lapis dua: delegasi klik untuk tombol tutup.
@@ -1000,9 +1022,12 @@ document.addEventListener('click', (e) => {
   if (e.target && e.target.closest && e.target.closest('#sideClose')) closeSide();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape'){ closeSide(); closeConfirm(false); closePicker(); }
+  if (e.key === 'Escape'){
+    if ($('sensorDialog').open){ e.preventDefault(); closeSensors(); return; }
+    closeSide(); closeConfirm(false); closePicker();
+  }
   if (e.key === 'Tab'){
-    const modal = !$('confirmOverlay').hidden ? $('confirmOverlay') : $('sidebar').classList.contains('open') ? $('sidebar') : null;
+    const modal = $('sensorDialog').open ? $('sensorDialog') : !$('confirmOverlay').hidden ? $('confirmOverlay') : mobileNavigation() && $('sidebar').classList.contains('open') ? $('sidebar') : null;
     if (!modal) return;
     const focusable=[...modal.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled)')].filter(el=>el.getClientRects().length);
     const first=focusable[0], last=focusable.at(-1);
@@ -1010,6 +1035,13 @@ document.addEventListener('keydown', (e) => {
     else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
   }
 });
+document.querySelectorAll('[data-sensors]').forEach(button=>button.addEventListener('click',()=>openSensors(button.dataset.sensors,button)));
+$('btnCloseSensors').addEventListener('click',()=>closeSensors());
+$('sensorDialog').addEventListener('cancel',e=>{ e.preventDefault(); closeSensors(); });
+let sensorBackdropDown=false;
+function outsideSensorDialog(e){ const r=$('sensorDialog').getBoundingClientRect(); return e.clientX<r.left || e.clientX>r.right || e.clientY<r.top || e.clientY>r.bottom; }
+$('sensorDialog').addEventListener('pointerdown',e=>{ sensorBackdropDown=e.target===$('sensorDialog') && outsideSensorDialog(e); });
+$('sensorDialog').addEventListener('click',e=>{ if(sensorBackdropDown && e.target===$('sensorDialog') && outsideSensorDialog(e)) closeSensors(); sensorBackdropDown=false; });
 $('confirmYes').onclick = () => closeConfirm(true);
 $('confirmNo').onclick = () => closeConfirm(false);
 $('confirmOverlay').addEventListener('pointerdown', (e) => { if (e.target === $('confirmOverlay')) closeConfirm(false); });
@@ -1019,7 +1051,7 @@ buildGrid(6); buildHumidityGrid(); buildLogHead(6); syncButtons(); renderSensors
 try { showPage(localStorage.getItem('scs_page') || 'dash'); } catch { showPage('dash'); }
 document.title='Masuk — SmartCow';
 $('localPreviewNotice').hidden=!['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname);
-window.addEventListener('resize',()=>{ if(window.matchMedia('(min-width: 981px)').matches) closeSide(); else setSide($('sidebar').classList.contains('open')); });
+window.addEventListener('resize',()=>setSide($('sidebar').classList.contains('open')));
 fbConnect();
 setInterval(refreshTelemetry,1000);
 setInterval(() => { updateSchedHint(); updateModeInfo(); }, 30000);

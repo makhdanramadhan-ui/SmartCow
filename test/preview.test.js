@@ -21,9 +21,32 @@ test('redesigned page has unique IDs and retains core control elements', () => {
   assert.equal(ids.length, new Set(ids).size);
   for (const id of ['sensorGrid', 'humidityGrid', 'thiValue', 'chartMetric', 'basisTemperature',
     'basisThi', 'srcThreshold', 'srcSchedule', 'schedList', 'btnSaveCfg', 'btnSprayOn', 'btnSprayOff',
-    'greetingName', 'accountName', 'accountAvatar']) {
+    'greetingName', 'accountName', 'accountAvatar', 'sensorDialog', 'btnCloseSensors',
+    'btnTemperatureDetails', 'btnHumidityDetails', 'menuBtn', 'sideClose']) {
     assert.ok(ids.includes(id), `missing control: ${id}`);
   }
+});
+
+test('overview puts relay and mode before climate summaries and keeps sensor grids inside a closed dialog', () => {
+  assert.ok(html.indexOf('class="grid command-grid"') < html.indexOf('class="grid summary-grid"'));
+  const dialog = html.match(/<dialog\b[^>]*id="sensorDialog"[^>]*>([\s\S]*?)<\/dialog>/);
+  assert.ok(dialog);
+  assert.doesNotMatch(dialog[0].split('>')[0], /\bopen\b/);
+  assert.match(dialog[1], /id="sensorGrid"/);
+  assert.match(dialog[1], /id="humidityGrid"/);
+  assert.match(dialog[1], /data-sensor-panel="temperature" hidden/);
+  assert.match(dialog[1], /data-sensor-panel="humidity" hidden/);
+  const main = html.match(/<main\b[^>]*id="mainContent"[^>]*>([\s\S]*?)<\/main>/)?.[1];
+  assert.ok(main);
+  assert.doesNotMatch(main, /id="(?:sensorGrid|humidityGrid)"/);
+  assert.match(main, /id="btnTemperatureDetails"[^>]*data-sensors="temperature"[^>]*aria-haspopup="dialog"/);
+  assert.match(main, /id="btnHumidityDetails"[^>]*data-sensors="humidity"[^>]*aria-haspopup="dialog"/);
+  assert.doesNotMatch(main, /href="#sensorSection"/);
+});
+
+test('sidebar starts closed and inert, with an accessible toggle', () => {
+  assert.match(html, /<aside\b[^>]*id="sidebar"[^>]*aria-hidden="true"[^>]*\binert\b/);
+  assert.match(html, /id="menuBtn"[^>]*aria-controls="sidebar"[^>]*aria-expanded="false"/);
 });
 
 test('local illustration is self-contained and contains no script or remote resource', () => {
@@ -54,7 +77,7 @@ test('preview HTTP server serves only runtime assets and refuses writes/private 
   assert.equal(page.headers.get('cache-control'), 'no-store');
   assert.match(await page.text(), /id="appShell" class="app-shell" hidden inert/);
   assert.equal((await fetch(origin + '/assets/farm-scene.svg')).status, 200);
-  assert.equal((await fetch(origin + '/js/app.js?v=36')).status, 200);
+  assert.equal((await fetch(origin + '/js/app.js?v=37')).status, 200);
   const head = await fetch(origin + '/index.html', { method: 'HEAD' });
   assert.equal(head.status, 200); assert.equal(await head.text(), '');
   for (const name of ['/.git/config', '/js/firebase-config.js', '/database.rules.json',
