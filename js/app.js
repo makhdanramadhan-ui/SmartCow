@@ -18,6 +18,13 @@ let events = [];
 try { const saved = JSON.parse(localStorage.getItem('scs_events') || '[]'); if (Array.isArray(saved)) events = saved.slice(0,50); } catch {}
 let fbConnected = false;
 let controlLoaded = false;
+let appliedCfg = SCSControl.normalize(CFG), settingsDirty = false, savingSettings = false;
+const basisName = cfg => cfg.controlBasis === 'thi' ? 'THI' : 'Suhu';
+const basisUnit = cfg => cfg.controlBasis === 'thi' ? ' THI' : ' °C';
+const metricValue = (view,cfg) => cfg.controlBasis === 'thi' ? view.thi : view.avg;
+const firmwareReady = () => sensorView.online && sensorView.controlPolicyVersion === 2;
+const profileOf = basis => appliedCfg.profiles[basis];
+function markSettingsDirty(){ settingsDirty=true; saveCfg(); $('settingsStatus').textContent='Perubahan belum dikirim. Klik Simpan Pengaturan untuk menerapkan.'; }
 
 // ---------- THEME (light/dark) ----------
 function curTheme(){ return localStorage.getItem('scs_theme') || 'dark'; }
@@ -64,6 +71,7 @@ function buildGrid(count){
 function renderLegend(){
   const leg = $('legend'); leg.innerHTML = '';
   const rh = $('chartMetric').value === 'humidity';
+  if ($('chartMetric').value === 'thi'){ leg.textContent='THI agregat · 6 DS + 4 DHT'; return; }
   for (let i = 0; i < (rh ? 4 : 6); i++){
     const s = document.createElement('span');
     s.innerHTML = `<i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[i]}"></i> ${rh ? 'DHT' : 'DS'}${i+1}`;
@@ -78,16 +86,18 @@ function buildLogHead(count){
   let h = '<th>Waktu (WIB)</th>';
   for (let i = 1; i <= count; i++) h += `<th>DS${i} °C</th>`;
   for (let i = 1; i <= 4; i++) h += `<th>DHT${i} %RH</th>`;
-  h += '<th>Rata² DS</th><th>Rata² RH</th><th>Status</th><th>Sprinkler</th>';
+  h += '<th>Rata² DS</th><th>Rata² RH</th><th>THI</th><th>Status dasar terpilih</th><th>Sprinkler</th>';
   tr.innerHTML = h;
 }
 function tempColor(t){
-  if (t >= CFG.threshold + 1) return '#ef4444';
-  if (t >= CFG.threshold) return '#f59e0b';
-  if (t >= CFG.threshold - 1) return '#4ade80';
+  const threshold=profileOf('temperature').threshold;
+  if (t >= threshold + 1) return '#ef4444';
+  if (t >= threshold) return '#f59e0b';
+  if (t >= threshold - 1) return '#4ade80';
   return '#60a5fa';
 }
 function renderSensors(){
+  const tempProfile=profileOf('temperature'), thiProfile=profileOf('thi');
   const shown = temps.filter(SCSTelemetry.finite);
   temps.forEach((t,i)=>{
     const el = $('sensor'+i); if(!el) return;
@@ -106,20 +116,20 @@ function renderSensors(){
     const bar = el.querySelector('.bar i');
     bar.style.width = pct+'%'; bar.style.background = tempColor(t);
     const st = el.querySelector('.s-state');
-    if (t >= CFG.threshold){ st.textContent = 'PANAS'; st.className = 's-state hot'; }
-    else if (t >= CFG.threshold - CFG.hysteresis){ st.textContent = 'WASPADA'; st.className = 's-state warn'; }
+    if (t >= tempProfile.threshold){ st.textContent = 'PANAS'; st.className = 's-state hot'; }
+    else if (t >= tempProfile.threshold - tempProfile.hysteresis){ st.textContent = 'WASPADA'; st.className = 's-state warn'; }
     else { st.textContent = 'NORMAL'; st.className = 's-state ok'; }
   });
   const avg = sensorView.avg;
   $('avgTemp').textContent = fmtValue(avg);
   $('minTemp').textContent = shown.length ? Math.min(...shown).toFixed(1)+'°C' : '—';
   $('maxTemp').textContent = shown.length ? Math.max(...shown).toFixed(1)+'°C' : '—';
-  $('thresholdLabel').textContent = CFG.threshold.toFixed(1)+'°C';
+  $('thresholdLabel').textContent = tempProfile.threshold.toFixed(1)+'°C';
   const pill = $('avgStatus');
   if (!SCSTelemetry.finite(avg)){ pill.textContent='DATA BELUM TERSEDIA'; pill.className='status-pill neutral'; }
   else if (!sensorView.complete){ pill.textContent='DATA PARSIAL · AUTO SUHU DIBLOKIR'; pill.className='status-pill waspada'; }
-  else if (avg >= CFG.threshold + 1){ pill.textContent='SUHU TINGGI · DI ATAS AMBANG'; pill.className='status-pill bahaya'; }
-  else if (avg >= CFG.threshold){ pill.textContent='⚠️ WASPADA — AMBANG TERSENTUH'; pill.className='status-pill waspada'; }
+  else if (avg >= tempProfile.threshold + 1){ pill.textContent='SUHU TINGGI · DI ATAS AMBANG'; pill.className='status-pill bahaya'; }
+  else if (avg >= tempProfile.threshold){ pill.textContent='⚠️ WASPADA — AMBANG TERSENTUH'; pill.className='status-pill waspada'; }
   else { pill.textContent='DI BAWAH AMBANG SUHU'; pill.className='status-pill normal'; }
   $('dsSummary').textContent = `${sensorView.validCount}/6 DS valid · rata-rata ${sensorView.complete ? 'lengkap' : 'parsial'}${sensorView.legacy ? ' · firmware lama' : ''}`;
   $('sensorTitle').textContent = `6 titik suhu · ${sensorView.validCount} valid`;
@@ -139,9 +149,15 @@ function renderSensors(){
   $('minHumidity').textContent = goodRH.length ? Math.min(...goodRH).toFixed(1)+'%' : '—';
   $('maxHumidity').textContent = goodRH.length ? Math.max(...goodRH).toFixed(1)+'%' : '—';
   $('humidityCount').textContent = `${sensorView.humidityValidCount}/4 valid`;
-  $('rhSummary').textContent = `${sensorView.humidityValidCount}/4 DHT valid · bukan pemicu relay`;
+  $('rhSummary').textContent = `${sensorView.humidityValidCount}/4 DHT valid · RH untuk THI`;
   $('humidityStatus').textContent = sensorView.humidityComplete ? '4 TITIK TERPANTAU' : goodRH.length ? 'DATA KELEMBAPAN PARSIAL' : 'DATA BELUM TERSEDIA';
   $('humidityStatus').className = 'status-pill ' + (sensorView.humidityComplete ? 'normal' : 'neutral');
+  $('thiValue').textContent=fmtValue(sensorView.thi);
+  $('thiThresholdLabel').textContent=thiProfile.threshold.toFixed(1);
+  $('thiSummary').textContent=`${sensorView.validCount}/6 DS + ${sensorView.humidityValidCount}/4 DHT valid · THI agregat, bukan per titik`;
+  const thiPill=$('thiStatus');
+  thiPill.textContent=sensorView.thiComplete ? sensorView.thi>=thiProfile.threshold ? 'THRESHOLD THI TERCAPAI' : 'DI BAWAH THRESHOLD THI' : 'PERLU 6 DS + 4 DHT VALID';
+  thiPill.className='status-pill '+(sensorView.thiComplete ? sensorView.thi>=thiProfile.threshold ? 'waspada' : 'normal' : 'neutral');
   for (const [id, name, online] of [['rightNode','ESP kanan',sensorView.online],['leftNode','ESP kiri',sensorView.leftOnline]]){
     $(id).textContent = `${name} · ${online ? 'online' : 'belum terhubung'}`; $(id).classList.toggle('online', online);
   }
@@ -154,7 +170,11 @@ function refreshTelemetry(){
   renderSensors(); renderSprinkler();
   setConn(fbConnected ? (!transportConnected ? 'err' : sensorView.online ? 'live' : 'offline') : 'login');
   $('btnSprayOn').disabled = $('btnSprayOff').disabled = CFG.mode !== 'manual' || !controlLoaded || !fbConnected || !sensorView.online || !transportConnected;
+  $('btnManual').disabled = !fbConnected || !controlLoaded || !transportConnected || !sensorView.online || savingSettings;
+  $('btnAuto').disabled = $('btnManual').disabled || !firmwareReady();
   autoControl(sensorView.avg);
+  $('firmwareNotice').hidden=firmwareReady();
+  $('btnSaveCfg').disabled = CFG.mode!=='auto' || !fbConnected || !controlLoaded || !transportConnected || !firmwareReady() || savingSettings;
   $('btnLogNow').disabled = !sensorView.online || !fbConnected;
 }
 
@@ -176,25 +196,25 @@ function renderSprinkler(){
   $('sprinklerText').textContent = sprinklerOn ? 'MENYEMPROT 💦' : 'MATI';
   if (sprinklerOn && sprayStart){
     const el = Math.floor((Date.now()-sprayStart)/1000);
-    $('sprinklerTimer').textContent = CFG.mode === 'manual' ? 'Manual ON · tetap nyala sampai perintah OFF.' : curAutoSrc() === 'schedule' ? 'Mengikuti durasi slot jadwal di ESP.' : `Terpantau nyala ${el} dtk · proteksi durasi dijalankan ESP.`;
+    $('sprinklerTimer').textContent = appliedCfg.mode === 'manual' ? 'Manual ON · tetap nyala sampai perintah OFF.' : `Terpantau nyala ${el} dtk · ${basisName(appliedCfg)}, hysteresis/durasi/cooldown di ESP.`;
   } else {
-    $('sprinklerTimer').textContent = CFG.mode==='manual' ? 'Mode manual — gunakan tombol.' : curAutoSrc()==='schedule' ? 'Mode jadwal — menunggu slot aktif.' : 'Mode otomatis suhu — status dari ESP.';
+    $('sprinklerTimer').textContent = appliedCfg.mode==='manual' ? 'Mode manual — gunakan tombol.' : `Otomatis ${basisName(appliedCfg)} · ${appliedCfg.autoSrc==='schedule' ? 'dalam jendela jadwal' : 'sepanjang waktu'}.`;
   }
 }
 setInterval(renderSprinkler, 1000);
 
 function autoControl(avg){
   if (!sensorView.online){ $('sprinklerReason').textContent = 'Tidak ada status perangkat terbaru. Nilai lama tidak dipakai sebagai data live.'; return; }
-  if (CFG.mode === 'auto' && curAutoSrc() === 'threshold' && !sensorView.complete){ $('sprinklerReason').textContent = 'Otomatis suhu diblokir: perlu 6/6 DS valid dan fresh. DHT tidak memengaruhi syarat ini.'; return; }
+  if (appliedCfg.mode==='auto' && !firmwareReady()){ $('sprinklerReason').textContent='Firmware kanan belum mendukung kebijakan baru. Upload v3.1; status relay tetap mengikuti laporan perangkat.'; return; }
+  if (appliedCfg.mode==='auto' && sensorView.controlBasis!==appliedCfg.controlBasis){ $('sprinklerReason').textContent='Setting tersimpan; menunggu ESP kanan menerapkan dasar kontrol yang dipilih.'; return; }
+  const complete=appliedCfg.controlBasis==='thi' ? sensorView.thiComplete : sensorView.complete;
+  if(appliedCfg.mode==='auto' && !complete){ $('sprinklerReason').textContent=`Otomatis ${basisName(appliedCfg)} diblokir: perlu ${appliedCfg.controlBasis==='thi' ? '6 DS + 4 DHT' : '6 DS'} valid/fresh.`; return; }
   // Web TIDAK pernah menjalankan kontrol otomatis atau auto-off sendiri.
-  if (CFG.mode === 'manual'){
+  if (appliedCfg.mode === 'manual'){
     $('sprinklerReason').textContent = 'Mode manual · status mengikuti laporan relay ESP kanan.';
-  } else if (curAutoSrc() === 'schedule'){
-    $('sprinklerReason').textContent = `Mode jadwal · ${schedSlots().length} slot tersimpan. Waktu dan eksekusi ditangani ESP kanan.`;
-  } else if (SCSTelemetry.finite(avg)){
-    $('sprinklerReason').textContent = avg >= CFG.threshold
-      ? 'Ambang suhu tercapai · relay mengikuti hysteresis, durasi maks, dan cooldown ESP.'
-      : 'Suhu di bawah ambang · relay tetap mengikuti logika lokal ESP.';
+  } else {
+    const value=metricValue(sensorView,appliedCfg), gated=appliedCfg.autoSrc==='schedule';
+    $('sprinklerReason').textContent=`${basisName(appliedCfg)} ${fmtValue(value)}${basisUnit(appliedCfg)} · threshold ${appliedCfg.threshold.toFixed(1)}${basisUnit(appliedCfg)}. ${gated ? 'Hanya dalam slot jadwal, bukan paksa ON. ' : ''}Hysteresis, durasi maks, dan cooldown dijalankan ESP.`;
   }
 }
 
@@ -204,7 +224,7 @@ function onNewData(raw){
   refreshTelemetry();
   if (!raw || !sensorView.online || raw.ts === lastUpdate) return;
   lastUpdate = raw.ts;
-  history.push({ t: lastUpdate, s: temps, h: humidities, avg:sensorView.avg, humidityAvg:sensorView.humidityAvg });
+  history.push({ t: lastUpdate, s: temps, h: humidities, avg:sensorView.avg, humidityAvg:sensorView.humidityAvg,thi:sensorView.thi });
   if (history.length > 1800) history = history.slice(-1800);
   localStorage.setItem('scs_hist', JSON.stringify(history.slice(-600)));
   drawChart();
@@ -220,23 +240,25 @@ function drawChart(){
   const data = history.filter((d) => Date.now() - d.t < 3600000).slice(-1800);
   if (data.length < 2) return;
   const rh = $('chartMetric').value === 'humidity';
-  const values = (row) => rh ? row.h || [] : row.s || [];
+  const thi=$('chartMetric').value==='thi';
+  const threshold=profileOf(thi ? 'thi' : 'temperature').threshold;
+  const values = (row) => thi ? [row.thi] : rh ? row.h || [] : row.s || [];
   let mn = 99, mx = -99;
   data.forEach(d=>{ values(d).filter(SCSTelemetry.finite).forEach(v=>{mn=Math.min(mn,v);mx=Math.max(mx,v);}); });
   if (rh){ mn = 0; mx = 100; }
-  else { mn = Math.min(mn, CFG.threshold-2)-0.3; mx = Math.max(mx, CFG.threshold+2)+0.3; }
+  else { mn = Math.min(mn, threshold-2)-0.3; mx = Math.max(mx, threshold+2)+0.3; }
   const X = i => 60 + (data[i].t-data[0].t)/Math.max(1,data[data.length-1].t-data[0].t)*(W-80);
   const Y = v => 20 + (1-(v-mn)/(mx-mn))*(H-70);
   // grid + threshold
   ctx.strokeStyle=T.grid; ctx.fillStyle=T.txt; ctx.font='22px sans-serif';
   for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4, y=Y(v);
     ctx.beginPath(); ctx.moveTo(60,y); ctx.lineTo(W-20,y); ctx.stroke();
-    ctx.fillText(v.toFixed(1)+(rh?'%':'°'), 4, y+7); }
+    ctx.fillText(v.toFixed(1)+(thi?'':rh?'%':'°'), 4, y+7); }
   if (!rh){
-  const yT = Y(CFG.threshold);
+   const yT = Y(threshold);
   ctx.setLineDash([12,8]); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=3;
   ctx.beginPath(); ctx.moveTo(60,yT); ctx.lineTo(W-20,yT); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle='#fbbf24'; ctx.fillText('threshold '+CFG.threshold.toFixed(1)+'°', 70, yT-10);
+   ctx.fillStyle='#fbbf24'; ctx.fillText('threshold '+threshold.toFixed(1)+(thi?' THI':'°C'), 70, yT-10);
   }
   const draw = (idx, color, get) => {
     ctx.strokeStyle=color; ctx.lineWidth = idx==='avg'?5:2.5; ctx.beginPath();
@@ -250,8 +272,11 @@ function drawChart(){
     });
     ctx.stroke();
   };
-  for(let s=0;s<(rh?4:6);s++) draw(s, COLORS[s]+'cc', d=>values(d)[s]);
-  if ($('showAvg').checked) draw('avg', AVG_COLOR, d=>rh ? d.humidityAvg : d.avg);
+  if(thi) draw('avg','#86efac',d=>d.thi);
+  else {
+    for(let s=0;s<(rh?4:6);s++) draw(s, COLORS[s]+'cc', d=>values(d)[s]);
+    if ($('showAvg').checked) draw('avg', AVG_COLOR, d=>rh ? d.humidityAvg : d.avg);
+  }
 }
 window.addEventListener('resize', drawChart);
 $('showAvg').onchange = drawChart;
@@ -262,7 +287,7 @@ $('btnClearChart').onclick = ()=>{ history=[]; localStorage.removeItem('scs_hist
 function addLogRow(avg){
   if (!sensorView.online) return;
   const row = { t: telemetry.ts, s: temps.slice(), h: humidities.slice(), avg:sensorView.avg,
-    humidityAvg:sensorView.humidityAvg, spray: sprinklerOn?1:0 };
+    humidityAvg:sensorView.humidityAvg,thi:sensorView.thi, spray: sprinklerOn?1:0 };
   logs.unshift(row); logs = logs.slice(0,120);
   localStorage.setItem('scs_logs', JSON.stringify(logs));
   renderLogs();
@@ -270,15 +295,16 @@ function addLogRow(avg){
 function renderLogs(){
   const f = $('filterSensor').value;
   const tb = $('logBody'); tb.innerHTML='';
-  const rows = logs.filter(r => f==='all' ? true : SCSTelemetry.finite(r.avg) && (f==='panas' ? r.avg>=CFG.threshold : r.avg<CFG.threshold));
-  if (!rows.length){ tb.innerHTML = '<tr><td colspan="15" class="empty">Belum ada riwayat sensor untuk filter ini.</td></tr>'; }
+  const valueOf=r=>appliedCfg.controlBasis==='thi' ? r.thi : r.avg;
+  const rows = logs.filter(r => f==='all' ? true : SCSTelemetry.finite(valueOf(r)) && (f==='panas' ? valueOf(r)>=appliedCfg.threshold : valueOf(r)<appliedCfg.threshold));
+  if (!rows.length){ tb.innerHTML = '<tr><td colspan="16" class="empty">Belum ada riwayat sensor untuk filter ini.</td></tr>'; }
   rows.forEach(r=>{
     const tr = document.createElement('tr');
     const time = new Date(r.t).toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    const hot = SCSTelemetry.finite(r.avg) && r.avg >= CFG.threshold;
+    const value=valueOf(r), hot=SCSTelemetry.finite(value) && value>=appliedCfg.threshold;
     tr.innerHTML = `<td>${time}</td>` + Array.from({length:6},(_,i)=>`<td>${fmtValue(r.s?.[i])}</td>`).join('')
       + Array.from({length:4},(_,i)=>`<td>${fmtValue(r.h?.[i])}</td>`).join('')
-      + `<td><b>${fmtValue(r.avg)}</b></td><td>${fmtValue(r.humidityAvg)}</td><td>${!SCSTelemetry.finite(r.avg)?'TIDAK VALID':hot?'PANAS':'DI BAWAH AMBANG'}</td><td>${r.spray?'💦 ON':'OFF'}</td>`;
+      + `<td><b>${fmtValue(r.avg)}</b></td><td>${fmtValue(r.humidityAvg)}</td><td>${fmtValue(r.thi)}</td><td>${basisName(appliedCfg)}: ${!SCSTelemetry.finite(value)?'TIDAK VALID':hot?'≥ THRESHOLD':'< THRESHOLD'}</td><td>${r.spray?'💦 ON':'OFF'}</td>`;
     tb.appendChild(tr);
   });
   $('logCount').textContent = `${logs.length}/120 baris terbaru`;
@@ -308,10 +334,10 @@ function closeConfirm(v){
   if (confirmRes){ const r = confirmRes; confirmRes = null; r(v); }
 }
 $('btnExport').onclick = ()=>{
-  let csv = 'waktu_wib,ds1,ds2,ds3,ds4,ds5,ds6,dht1_rh,dht2_rh,dht3_rh,dht4_rh,avg_ds,avg_rh,sprinkler\n';
+  let csv = 'waktu_wib,ds1,ds2,ds3,ds4,ds5,ds6,dht1_rh,dht2_rh,dht3_rh,dht4_rh,avg_ds,avg_rh,thi,sprinkler\n';
   [...logs].reverse().forEach(r=>{
     const w = new Date(r.t).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'});
-    csv += `"${w}",` + [...Array.from({length:6},(_,i)=>r.s?.[i]),...Array.from({length:4},(_,i)=>r.h?.[i]),r.avg,r.humidityAvg].map(v=>SCSTelemetry.finite(v)?v:'').join(',') + `,${r.spray?'ON':'OFF'}\n`;
+    csv += `"${w}",` + [...Array.from({length:6},(_,i)=>r.s?.[i]),...Array.from({length:4},(_,i)=>r.h?.[i]),r.avg,r.humidityAvg,r.thi].map(v=>SCSTelemetry.finite(v)?v:'').join(',') + `,${r.spray?'ON':'OFF'}\n`;
   });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
@@ -363,7 +389,7 @@ function clampToday(iso, hm){
 // Aturan: tanggal bebas (min hari ini). Khusus hari ini, jam min = sekarang+1 mnt.
 function renderSchedList(){
   const box = $('schedList'); if (!box) return;
-  const locked = CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected;
+  const locked = CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected || savingSettings;
   box.innerHTML = '';
   const slots = schedSlots();
   if (!slots.length){
@@ -377,7 +403,7 @@ function renderSchedList(){
       <div class="sched-groups">
         <button class="pick-btn" data-pick="date" data-i="${i}" data-pop-anchor ${locked ? 'disabled' : ''} title="Pilih tanggal"><span class="pick-ico">📅</span><span>${f || s.date}</span></button>
         <button class="pick-btn" data-pick="time" data-i="${i}" data-pop-anchor ${locked ? 'disabled' : ''} title="Pilih jam (24 jam)"><span class="pick-ico">🕐</span><span>${s.start}</span></button>
-        <div class="sched-group"><span>Lama waktu semprotan nyala</span><div class="sched-inline step">
+        <div class="sched-group"><span>Lebar jendela jadwal</span><div class="sched-inline step">
           <button data-dec="${i}" title="Kurangi 1 menit" ${locked ? 'disabled' : ''}>−</button><b data-durv="${i}">${s.dur}</b><button data-inc="${i}" title="Tambah 1 menit" ${locked ? 'disabled' : ''}>+</button><i>mnt</i>
         </div></div>
       </div>
@@ -391,7 +417,7 @@ function renderSchedList(){
     const arr = [...schedSlots()];
     if (!arr[i]) return;
     arr[i].dur = Math.min(180, Math.max(1, arr[i].dur + d));
-    CFG.schedules = arr; saveCfg();
+    CFG.schedules = arr; markSettingsDirty();
     const b = box.querySelector(`[data-durv="${i}"]`);
     if (b) b.textContent = arr[i].dur;
     updateSchedHint(); updateModeInfo();
@@ -406,7 +432,7 @@ function renderSchedList(){
       }, 400);
       btn._t1 = t1;
     };
-    const stop = () => { clearTimeout(btn._t1); if (btn._stop) btn._stop(); fbPushControl(); };
+    const stop = () => { clearTimeout(btn._t1); if (btn._stop) btn._stop(); };
     btn.addEventListener('pointerdown', start);
     ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => btn.addEventListener(ev, stop));
   }
@@ -417,9 +443,7 @@ function renderSchedList(){
       const cur = readSchedList(true);
       cur.splice(+btn.dataset.del, 1);
       CFG.schedules = cur; // boleh kosong, tidak respawn
-      saveCfg(); syncButtons();
-      pushEvent(cur.length ? 'Jadwal dihapus, sisa ' + cur.length + '×' : 'Semua jadwal dihapus');
-      fbPushControl();
+      markSettingsDirty(); syncButtons();
     };
   });
   const add = $('btnAddSched'); if (add) add.disabled = locked || schedSlots().length >= 6;
@@ -493,9 +517,7 @@ function openSlotPicker(btn){
 }
 function commitSlots(slots, msg){
   CFG.schedules = slots.slice(0, 6);
-  saveCfg(); syncButtons(); updateSchedHint();
-  if (msg) pushEvent(msg);
-  fbPushControl();
+  markSettingsDirty(); syncButtons(); updateSchedHint();
 }
 // --- Kalender popup: min hari ini, maks 31 Des 2030 ---
 function openDatePop(btn, i, s){
@@ -649,66 +671,72 @@ function syncButtons(){
   $('btnAuto').classList.toggle('active', CFG.mode==='auto');
   $('btnManual').classList.toggle('active', CFG.mode==='manual');
   $('btnSprayOn').disabled = $('btnSprayOff').disabled = CFG.mode!=='manual' || !controlLoaded || !fbConnected || !sensorView.online || !transportConnected;
-  $('btnAuto').disabled = $('btnManual').disabled = !fbConnected || !controlLoaded || !transportConnected;
-  const locked = CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected;
+  $('btnManual').disabled = !fbConnected || !controlLoaded || !transportConnected || !sensorView.online || savingSettings;
+  $('btnAuto').disabled = $('btnManual').disabled || !firmwareReady();
+  const locked = CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected || savingSettings;
   const src = curAutoSrc();
   const isThresh = src === 'threshold';
   $('srcThreshold').checked = isThresh;
   $('srcSchedule').checked = !isThresh;
   $('srcThreshold').disabled = $('srcSchedule').disabled = locked;
-  ['inThreshold','rangeThreshold'].forEach((id)=>{ $(id).disabled = locked || !isThresh; });
-  ['inMaxDur','inCooldown'].forEach((id)=>{ $(id).disabled = locked; });
-  $('btnSaveCfg').disabled = locked;
+  $('basisTemperature').checked=CFG.controlBasis==='temperature'; $('basisThi').checked=CFG.controlBasis==='thi';
+  $('basisTemperature').disabled=$('basisThi').disabled=locked;
+  ['inThreshold','rangeThreshold','inHysteresis','inMaxDur','inCooldown'].forEach((id)=>{ $(id).disabled = locked; });
+  $('btnSaveCfg').disabled = locked || !firmwareReady();
   $('btnSaveCfg').textContent = !fbConnected ? '🔐 Login untuk mengatur' : !controlLoaded ? 'Menunggu konfigurasi perangkat' : locked ? '🔒 Pengaturan terkunci' : '💾 Simpan Pengaturan';
-  $('inThreshold').value = CFG.threshold; $('rangeThreshold').value = CFG.threshold;
+  const thi=CFG.controlBasis==='thi';
+  for(const id of ['inThreshold','rangeThreshold']){ $(id).min=thi ? 0 : -55; $(id).max=thi ? 120 : 125; $(id).value=CFG.threshold; }
+  $('inHysteresis').value=CFG.hysteresis;
+  $('thresholdInputLabel').textContent=`Threshold semprot ${basisName(CFG)}${thi ? ' (indeks)' : ' (°C)'}`;
+  $('hysteresisInputLabel').textContent=`Hysteresis (${thi ? 'poin THI' : '°C'})`;
+  $('scheduleTitle').textContent=`Jendela jadwal ${basisName(CFG)} (maks 6×)`;
+  $('controlBasisHint').textContent=`Profil ${basisName(CFG)}: threshold, hysteresis, durasi/cooldown dan jadwal sendiri. ${thi ? 'THI dari rata-rata 6 DS + RH rata-rata 4 DHT.' : 'DHT tidak wajib untuk kontrol suhu.'} Klik Simpan untuk menerapkan.`;
   $('inMaxDur').value = CFG.maxDuration; $('inCooldown').value = CFG.cooldown;
-  // Conditional: hanya grup yang kepilih yang tampil (yang lain display:none biar clean).
-  // Mode suhu -> threshold + proteksi. Mode jadwal -> daftar slot saja (tanpa cooldown/proteksi).
-  $('threshGroup').style.display = isThresh ? '' : 'none';
-  $('protectGroup').style.display = isThresh ? '' : 'none';
+  // Jadwal tetap memakai threshold serta seluruh proteksi profil terpilih.
+  $('threshGroup').style.display = '';
+  $('protectGroup').style.display = '';
   $('schedGroup').style.display = isThresh ? 'none' : '';
   renderSchedList();
   updateSchedHint();
   updateModeInfo();
 }
-$('btnAuto').onclick = ()=>{ CFG.mode='auto'; saveCfg(); syncButtons(); pushEvent('Mode → OTOMATIS'); fbPushControl(); };
-$('btnManual').onclick = ()=>{ CFG.mode='manual'; saveCfg(); syncButtons(); pushEvent('Mode → MANUAL'); fbPushControl(); };
+async function setMode(mode){
+  if (!fbConnected || !controlLoaded || !transportConnected || !sensorView.online || (mode==='auto' && !firmwareReady())){
+    $('settingsStatus').textContent='Perangkat harus online dengan firmware kanan v3.1 sebelum mengaktifkan otomatis.'; return;
+  }
+  try { await SCSFirebase.pushControl({mode}); CFG.mode=mode; saveCfg(); syncButtons(); }
+  catch { $('settingsStatus').textContent='Perubahan mode gagal dikirim.'; }
+}
+$('btnAuto').onclick = ()=>setMode('auto');
+$('btnManual').onclick = ()=>setMode('manual');
 $('btnSprayOn').onclick = ()=> setSprinkler(true, 'tombol manual');
 $('btnSprayOff').onclick = ()=> setSprinkler(false, 'tombol manual');
-function fbPushControl(){
-  if (fbConnected && controlLoaded && transportConnected && window.SCSFirebase){
-    const slots = schedSlots();
-    const ctl = { mode: CFG.mode, autoSrc: curAutoSrc(), threshold: CFG.threshold, hysteresis: CFG.hysteresis, maxDuration: CFG.maxDuration, cooldown: CFG.cooldown, schN: slots.length, schOn: curAutoSrc() === 'schedule' && slots.length ? 1 : 0 };
-    slots.forEach((s, i) => { ctl['sch' + (i + 1) + 'Date'] = s.date; ctl['sch' + (i + 1) + 'Start'] = s.start; ctl['sch' + (i + 1) + 'Dur'] = s.dur; });
-    // Kompatibel firmware lama (1 jadwal): slot pertama.
-    if (slots.length){ ctl.schStart = slots[0].start; ctl.schDur = slots[0].dur; }
-    SCSFirebase.pushControl(ctl).catch(()=>{ $('sprinklerReason').textContent='Pengaturan gagal dikirim ke Firebase.'; });
-  } else {
-    $('sprinklerReason').textContent='Konfigurasi belum tersinkron; perubahan belum dikirim.';
+async function fbPushControl(){
+  if (!fbConnected || !controlLoaded || !transportConnected || !firmwareReady() || !window.SCSFirebase){
+    $('settingsStatus').textContent='Belum dikirim: login, koneksi, dan firmware kanan v3.1 harus siap.'; return;
   }
+  const submitted=SCSControl.normalize(SCSControl.capture(CFG));
+  savingSettings=true; syncButtons();
+  try {
+    await SCSFirebase.pushControl(SCSControl.toFirebase(submitted));
+    appliedCfg=submitted; CFG=SCSControl.normalize(submitted); settingsDirty=false; saveCfg();
+    $('settingsStatus').textContent=`Profil ${basisName(submitted)} tersimpan di Firebase; ESP membaca setting sekitar tiap 5 detik.`;
+    pushEvent(`Setting ${basisName(submitted)}: threshold ${submitted.threshold}${basisUnit(submitted)}, ${submitted.autoSrc==='schedule' ? 'dalam jadwal' : 'sepanjang waktu'}`);
+  } catch {
+    CFG=SCSControl.normalize(submitted); settingsDirty=true; saveCfg();
+    $('settingsStatus').textContent='Gagal menyimpan. Perubahan masih berupa draft; coba lagi.';
+  }
+  finally { savingSettings=false; syncButtons(); refreshTelemetry(); drawChart(); }
 }
 // Info kecil: lagi pake mode apa + ringkasannya.
 function updateModeInfo(){
   const el = $('modeInfo'); if (!el) return;
-  if (CFG.mode !== 'auto'){
+  const cfg=appliedCfg;
+  if (cfg.mode !== 'auto'){
     el.textContent = 'Manual: ON bertahan sampai perintah OFF, termasuk saat internet putus. Uji tanpa beban AC dahulu.';
     return;
   }
-  if (curAutoSrc() === 'threshold'){
-    el.textContent = `🌡️ Auto suhu ≥ ${(+CFG.threshold).toFixed(1)}°C · wajib 6 DS valid · maks ${CFG.maxDuration} dtk, cooldown ${CFG.cooldown} dtk. Bisa mati lebih awal saat suhu turun/data gagal.`;
-    return;
-  }
-  const now = Date.now(), today = SCS.wibDateStr();
-  const slots = schedSlots();
-  const todayLeft = slots.filter((s) => s.date === today && SCS.slotState(s, now) !== 'past');
-  if (todayLeft.length){
-    el.textContent = `🗓️ Semprotan dijadwalkan menyala hari ini pada ${todayLeft.map((s) => `${s.start} (${s.dur} mnt)`).join(', ')}.`;
-    return;
-  }
-  const nx = SCS.nextSchedule(now, slots);
-  el.textContent = nx
-    ? `🗓️ Tidak ada jadwal tersisa hari ini. Berikutnya ${SCS.formatIDSlot(nx)}.`
-    : '🗓️ Belum ada jadwal — klik ＋ Tambah.';
+  el.textContent=`${basisName(cfg)} ≥ ${cfg.threshold.toFixed(1)}${basisUnit(cfg)} · ${cfg.autoSrc==='schedule' ? 'hanya dalam jadwal' : 'sepanjang waktu'} · maks ${cfg.maxDuration} dtk, cooldown ${cfg.cooldown} dtk. Data tidak lengkap → otomatis OFF.`;
 }
 function updateSchedHint(){
   const el = $('schedHint'); if (!el) return;
@@ -720,7 +748,7 @@ function updateSchedHint(){
   const run = SCS.anyScheduleActive(now, slots);
   const nx = SCS.nextSchedule(now, slots);
   const daftar = slots.map((s) => SCS.formatIDSlot(s)).join(', ');
-  el.textContent = `${slots.length}×: ${daftar}. ` + (run ? 'SEDANG BERJALAN 💦' : (nx ? `Berikutnya ${SCS.formatIDSlot(nx)}.` : ''));
+  el.textContent = `${basisName(CFG)} · ${slots.length} jendela: ${daftar}. ` + (run ? 'JENDELA AKTIF, bukan paksa ON. ' : (nx ? `Berikutnya ${SCS.formatIDSlot(nx)}. ` : '')) + `Tetap mengikuti threshold ${CFG.threshold}${basisUnit(CFG)}, hysteresis, durasi maks dan cooldown.`;
 }
 let fbTries = 0;
 // fbStatus hanya tampil saat belum live (sim/error) biar tampilan clean.
@@ -744,17 +772,16 @@ function fbConnect(){
     onTransport: (online)=>{ transportConnected=online; syncButtons(); refreshTelemetry(); },
     onAuth: (ok)=>{
       fbConnected=ok; $('authPanel').hidden=ok; $('btnLogout').hidden=!ok;
-      if (!ok){ controlLoaded=false; telemetry=null; transportConnected=false; lastUpdate=null; history=[]; logs=[]; events=[]; renderLogs(); renderEvents(); drawChart(); }
+      if (!ok){ controlLoaded=false; settingsDirty=false; telemetry=null; transportConnected=false; lastUpdate=null; history=[]; logs=[]; events=[]; renderLogs(); renderEvents(); drawChart(); }
       setFbStatus(ok ? '' : 'Masuk dengan akun Firebase yang sudah ada.', 'login'); syncButtons(); refreshTelemetry();
     },
     onControl: (ctl)=>{
       if (!ctl){ controlLoaded=false; syncButtons(); return; }
       controlLoaded=true;
-      if (ctl.mode === 'manual' || ctl.mode === 'auto') CFG.mode=ctl.mode;
-      if (ctl.autoSrc === 'schedule' || ctl.autoSrc === 'threshold') CFG.autoSrc=ctl.autoSrc;
-      for (const key of ['threshold','hysteresis','maxDuration','cooldown']) if (SCSTelemetry.finite(ctl[key])) CFG[key]=ctl[key];
-      CFG.schedules=Array.from({length:Math.min(6,Math.max(0,ctl.schN||0))},(_,i)=>({date:ctl[`sch${i+1}Date`],start:ctl[`sch${i+1}Start`],dur:ctl[`sch${i+1}Dur`]}));
-      saveCfg(); syncButtons(); refreshTelemetry();
+      appliedCfg=SCSControl.fromFirebase(ctl);
+      if (!settingsDirty && !savingSettings) CFG=SCSControl.normalize(appliedCfg);
+      else CFG.mode=appliedCfg.mode;
+      saveCfg(); syncButtons(); refreshTelemetry(); renderLogs();
     },
     onTelemetry: (p)=>{
       onNewData(p);
@@ -788,23 +815,30 @@ $('loginForm').onsubmit = async (e)=>{
 $('btnLogout').onclick=()=>SCSFirebase.logout().catch(()=>{});
 
 // ---------- SETTINGS ----------
-$('rangeThreshold').oninput = e => { $('inThreshold').value = e.target.value; };
-$('inThreshold').oninput = e => { $('rangeThreshold').value = e.target.value; };
-$('srcThreshold').onchange = () => { CFG.autoSrc = 'threshold'; CFG.schedOn = false; saveCfg(); syncButtons(); renderSensors(); };
-$('srcSchedule').onchange = () => { CFG.autoSrc = 'schedule'; CFG.schedOn = true; saveCfg(); syncButtons(); renderSensors(); };
+function readSettingsInputs(){
+  const fields=[['inThreshold','threshold',CFG.controlBasis==='thi' ? 0 : -55,CFG.controlBasis==='thi' ? 120 : 125],
+    ['inHysteresis','hysteresis',0,50],['inMaxDur','maxDuration',1,10800],['inCooldown','cooldown',0,10800]];
+  for(const [id,key,min,max] of fields){
+    const value=Number($(id).value);
+    if($(id).value.trim() && Number.isFinite(value)){
+      const bounded=Math.max(min,Math.min(max,value));
+      CFG[key]=key==='maxDuration' || key==='cooldown' ? Math.round(bounded) : bounded;
+    }
+  }
+}
+$('rangeThreshold').oninput = e => { $('inThreshold').value = e.target.value; readSettingsInputs(); markSettingsDirty(); };
+$('inThreshold').oninput = e => { $('rangeThreshold').value = e.target.value; readSettingsInputs(); markSettingsDirty(); };
+for(const id of ['inHysteresis','inMaxDur','inCooldown']) $(id).oninput=()=>{readSettingsInputs();markSettingsDirty();};
+function changeBasis(basis){ readSettingsInputs(); CFG=SCSControl.selectBasis(CFG,basis); markSettingsDirty(); syncButtons(); }
+$('basisTemperature').onchange=()=>changeBasis('temperature');
+$('basisThi').onchange=()=>changeBasis('thi');
+$('srcThreshold').onchange = () => { readSettingsInputs(); CFG.autoSrc = 'threshold'; markSettingsDirty(); syncButtons(); };
+$('srcSchedule').onchange = () => { readSettingsInputs(); CFG.autoSrc = 'schedule'; markSettingsDirty(); syncButtons(); };
 $('btnSaveCfg').onclick = ()=>{
   CFG.autoSrc = $('srcSchedule').checked ? 'schedule' : 'threshold';
-  CFG.schedOn = CFG.autoSrc === 'schedule';
-  CFG.threshold = Math.min(40, Math.max(20, parseFloat($('inThreshold').value)||30));
-  CFG.hysteresis = 1.0; // tetap sebagai proteksi anti cetak-cetek relay, disembunyikan dari UI
-  CFG.maxDuration = parseInt($('inMaxDur').value)||120;
-  CFG.cooldown = parseInt($('inCooldown').value)||60;
+  readSettingsInputs();
   CFG.schedules = readSchedList();
   saveCfg(); syncButtons(); renderSensors(); drawChart();
-  const slots = schedSlots();
-  pushEvent(CFG.autoSrc === 'schedule'
-    ? `Pengaturan disimpan: mode JADWAL ${slots.length}× (${slots.map((s)=>SCS.formatIDSlot(s)).join(', ')})`
-    : `Pengaturan disimpan: mode SUHU threshold ${CFG.threshold}°C, hyst ${CFG.hysteresis}°C`);
   fbPushControl();
 };
 $('btnAddSched').onclick = ()=>{
@@ -829,7 +863,7 @@ $('btnAddSched').onclick = ()=>{
     ns = `${String(Math.floor(nh / 60)).padStart(2, '0')}:${String(nh % 60).padStart(2, '0')}`;
   }
   CFG.schedules = [...cur, { date: ndate, start: ns, dur: 10 }];
-  saveCfg(); syncButtons();
+  markSettingsDirty(); syncButtons();
 };
 
 // ---------- SIDEBAR DRAWER + HALAMAN (dashboard / log / event) ----------
@@ -894,15 +928,4 @@ try { showPage(localStorage.getItem('scs_page') || 'dash'); } catch { showPage('
 fbConnect();
 setInterval(refreshTelemetry,1000);
 setInterval(() => { updateSchedHint(); updateModeInfo(); }, 30000);
-// Auto-prune berkala: slot kedaluwarsa hilang sendiri walau halaman dibiarkan terbuka.
-// Hanya jalan bila user tidak sedang mengetik (biar tidak ganggu edit) + mode jadwal aktif.
-setInterval(() => {
-   if (!fbConnected || !controlLoaded || !transportConnected || curAutoSrc() !== 'schedule') return;
-  const ae = document.activeElement;
-  if (ae && ae.tagName === 'INPUT') return;
-  const fresh = SCS.prunePastSlots(schedSlots(), Date.now());
-  if (fresh.length !== schedSlots().length){
-    CFG.schedules = fresh;
-    saveCfg(); syncButtons(); fbPushControl();
-  }
-}, 30000);
+// Tidak ada penulisan otomatis setting saat login/telemetry/prune; hanya Simpan.

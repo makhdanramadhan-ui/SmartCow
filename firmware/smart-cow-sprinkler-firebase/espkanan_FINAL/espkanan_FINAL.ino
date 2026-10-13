@@ -1,5 +1,5 @@
 // SmartCow FINAL KANAN: 3 DS18B20 + 2 DHT22 lokal, sisi kiri via ESP-NOW.
-// Rata-rata/kontrol suhu HANYA DS. DHT22: RH + suhu pendamping untuk monitoring.
+// Suhu HANYA DS; kontrol pilih suhu atau THI agregat (6 DS + RH 4 DHT).
 // Board: ESP32 klasik Dev Module / WROOM-32. Library: OneWire,
 // DallasTemperature, DHT sensor library (Adafruit), ArduinoJson versi 7.
 // Upload dari folder espkanan_FINAL. Pasangkan HANYA dengan espkiri_FINAL (v3).
@@ -7,11 +7,11 @@
 // DHT1 DATA19, DHT2 DATA25. GPIO20 TIDAK ADA pada ESP32 klasik.
 // VCC3V3/GND lokal; pull-up DATA 4.7k-10k ke 3V3 jika belum ada di modul.
 // DHT harus teduh/kering tetapi berventilasi; jauh dari hujan dan sprinkler.
-// Kontrol relay TETAP berdasarkan suhu, BUKAN RH/THI. Gagal DHT tidak memblokir
-// threshold jika 6 DS valid. Gagal DS/kiri stale -> threshold OFF seperti versi DS.
-// Manual/jadwal tidak memakai proteksi suhu/maxDuration/cooldown threshold.
+// Suhu: wajib 6 DS. THI: wajib 6 DS + 4 RH. Gagal/stale -> otomatis OFF.
+// Jadwal = jendela waktu untuk threshold dasar terpilih, BUKAN paksa ON.
+// Threshold/jadwal sama-sama memakai hysteresis/durasi maks/cooldown.
 // Manual ON bertahan sampai perintah OFF, termasuk saat internet putus.
-// THI belum dihitung: pasangan lokasi DS/DHT belum ditentukan.
+// Manual ON tidak memakai kelengkapan sensor/durasi maks/cooldown otomatis.
 // Cabut daya saat pindah jack; uji tanpa AC. Pengerjaan 220V oleh orang kompeten.
 
 #include <Arduino.h>
@@ -22,11 +22,13 @@
 #include <ArduinoJson.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
+#include <esp_mac.h>
 #include <esp_arduino_version.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <time.h>
 #include <math.h>
+#include "ClimatePolicy.h"
 
 // ISI DI SALINAN LOKAL, jangan commit password/secret. Rotasi secret terbagikan.
 #define WIFI_SSID "GANTI_WIFI_SSID"
@@ -54,7 +56,8 @@ constexpr uint32_t LOG_MS = 30000;
 constexpr uint32_t WIFI_RETRY_MS = 30000;
 constexpr uint32_t WIFI_CONNECT_WINDOW_MS = 10000;
 constexpr uint8_t MAX_SLOTS = 6;
-const char FW_VERSION[] = "3.0.0-final-ds-dht22";
+const char FW_VERSION[] = "3.1.1-final-thi-mac-check";
+constexpr uint8_t CONTROL_POLICY_VERSION = 2;
 
 // Format HARUS identik dengan espkiri_FINAL.
 constexpr uint32_t PACKET_MAGIC = 0x53435732;
@@ -88,6 +91,7 @@ struct ScheduleSlot {
 };
 struct ControlConfig {
   char mode[8], manual[8], autoSource[10];
+  bool useThi;
   float threshold, hysteresis;
   int maxDuration, cooldown, slotCount;
   ScheduleSlot slots[MAX_SLOTS];
@@ -106,6 +110,8 @@ struct Snapshot {
   uint32_t humidityAgeMs[4];
   float dhtTemperature[4];
   uint32_t temperatureAgeMs[6];
+  float thi;
+  bool thiComplete, useThi;
 };
 struct RelayEvent {
   char type[24], reason[80];
@@ -357,6 +363,9 @@ void buildSnapshot(Snapshot &out) {
     }
   }
   out.humidityAvg = out.humidityValidCount ? sum / out.humidityValidCount : NAN;
+  out.thiComplete = out.complete && out.humidityValidMask == 15;
+  out.thi = out.thiComplete ? aggregateThi(out.avg, out.humidityAvg) : NAN;
+  out.useThi = control.useThi;
   out.relayOn = relayOn;
   out.capturedAt = now;
   strcpy(out.mode, control.mode);
@@ -403,9 +412,13 @@ bool schedActiveNow() {
       int year, month, day, start;
       char trailing;
       if (sscanf(control.slots[i].date, "%d-%d-%d%c", &year, &month, &day, &trailing) != 3) continue;
-      if (year != local.tm_year + 1900 || month != local.tm_mon + 1 || day != local.tm_mday) continue;
-      if (parseClock(control.slots[i].start, start) && inWindow(current, start, control.slots[i].duration))
-        return true;
+      if (!parseClock(control.slots[i].start, start)) continue;
+      struct tm begin = {};
+      begin.tm_year = year - 1900; begin.tm_mon = month - 1; begin.tm_mday = day;
+      begin.tm_hour = start / 60; begin.tm_min = start % 60; begin.tm_isdst = -1;
+      time_t t0 = mktime(&begin);
+      if (begin.tm_year != year - 1900 || begin.tm_mon != month - 1 || begin.tm_mday != day) continue;
+      if (now >= t0 && now < t0 + control.slots[i].duration * 60) return true;
     }
     return false;
   }
@@ -414,31 +427,27 @@ bool schedActiveNow() {
     inWindow(current, start, control.legacyDuration);
 }
 
-void applyLogic(float avg, bool complete, bool scheduleOn) {
+void applyLogic(const Snapshot &state) {
   uint32_t now = millis();
   if (strcmp(control.mode, "manual") == 0) {
     bool on = strcmp(control.manual, "on") == 0;
-    setRelay(on, on ? "manual_on" : "manual_off", "perintah web", avg);
+    setRelay(on, on ? "manual_on" : "manual_off", "perintah web", state.avg);
     return;
   }
-  if (strcmp(control.autoSource, "schedule") == 0) {
-    setRelay(scheduleOn, scheduleOn ? "jadwal_on" : "jadwal_off",
-      scheduleOn ? "slot jadwal aktif" : "jadwal selesai / waktu belum valid", avg);
-    return;
+  ClimateInput input = {control.useThi ? state.thi : state.avg, control.threshold, control.hysteresis,
+    relayOn, control.useThi ? state.thiComplete : state.complete,
+    strcmp(control.autoSource,"schedule") == 0, state.scheduleOn,
+    uint32_t(now-sprayStart)/1000UL, uint32_t(now-lastSprayEnd)/1000UL,
+    uint32_t(control.maxDuration), uint32_t(control.cooldown)};
+  ClimateDecision decision = climateDecision(input);
+  if (decision == ClimateDecision::On)
+    setRelay(true,"auto_on",control.useThi ? "THI >= threshold" : "suhu DS >= threshold",state.avg);
+  else if (decision == ClimateDecision::Off) {
+    const char *reason = !input.complete ? "sensor tidak lengkap / stale" :
+      input.scheduled && !input.windowActive ? "di luar jendela jadwal / jam belum valid" :
+      input.on && input.runSeconds >= input.maxDuration ? "durasi maks" : "hysteresis";
+    setRelay(false,"auto_off",reason,state.avg);
   }
-  if (!complete || !isfinite(avg)) {
-    setRelay(false, "sensor_off", "data 6 sensor belum lengkap / kedaluwarsa", avg);
-    return;
-  }
-  if (relayOn && uint32_t(now - sprayStart) / 1000UL >= uint32_t(control.maxDuration)) {
-    setRelay(false, "protect_off", "durasi maks", avg);
-    return;
-  }
-  if (!relayOn && avg >= control.threshold &&
-      uint32_t(now - lastSprayEnd) / 1000UL >= uint32_t(control.cooldown))
-    setRelay(true, "auto_on", "avg >= threshold", avg);
-  else if (relayOn && avg <= control.threshold - control.hysteresis)
-    setRelay(false, "auto_off", "hysteresis", avg);
 }
 
 String devPath(const char *leaf) {
@@ -501,6 +510,11 @@ void fillHumidity(JsonDocument &doc, const Snapshot &state) {
 
 void fillTelemetry(JsonDocument &doc, const Snapshot &state) {
   doc["schemaVersion"] = 3;
+  doc["controlPolicyVersion"] = CONTROL_POLICY_VERSION;
+  doc["controlBasis"] = state.useThi ? "thi" : "temperature";
+  doc["thiComplete"] = state.thiComplete;
+  if (state.thiComplete) doc["thi"] = state.thi;
+  else doc["thi"] = nullptr;
   JsonArray ages = doc["temperatureAgeMs"].to<JsonArray>();
   for (int i = 0; i < 6; i++) {
     char key[4];
@@ -551,6 +565,11 @@ void sendStatus(const Snapshot &state) {
   doc["lastSeen"][".sv"] = "timestamp";
   doc["ip"] = WiFi.localIP().toString();
   doc["fw"] = FW_VERSION;
+  doc["controlPolicyVersion"] = CONTROL_POLICY_VERSION;
+  doc["controlBasis"] = state.useThi ? "thi" : "temperature";
+  doc["thiComplete"] = state.thiComplete;
+  if (state.thiComplete) doc["thi"] = state.thi;
+  else doc["thi"] = nullptr;
   doc["leftOnline"] = state.leftOnline;
   doc["validCount"] = state.validCount;
   doc["validMask"] = state.validMask;
@@ -582,34 +601,40 @@ bool parseControl(const String &body, ControlConfig &out) {
   const char *mode = doc["mode"] | "auto";
   const char *manual = doc["manualSsr"] | "off";
   bool legacy = doc["schOn"].is<bool>() ? doc["schOn"].as<bool>() : doc["schOn"].as<int>() != 0;
-  const char *source = doc["autoSrc"] | (legacy ? "schedule" : "threshold");
+  bool policyV2 = doc["controlPolicyVersion"].as<int>() == CONTROL_POLICY_VERSION;
+  const char *basis = doc["controlBasis"] | "temperature";
+  if ((doc["controlPolicyVersion"].is<int>() && !policyV2) ||
+      (strcmp(basis,"temperature") && strcmp(basis,"thi")) || (!policyV2 && !strcmp(basis,"thi"))) return false;
+  String prefix = !strcmp(basis,"thi") ? "thi" : "temp";
+  const char *source = policyV2 ? (doc[prefix+"AutoSrc"] | "threshold") : (doc["autoSrc"] | (legacy ? "schedule" : "threshold"));
   if ((strcmp(mode, "auto") && strcmp(mode, "manual")) ||
       (strcmp(manual, "on") && strcmp(manual, "off")) ||
       (strcmp(source, "threshold") && strcmp(source, "schedule"))) return false;
   out = defaultControl();
+  out.useThi = !strcmp(basis,"thi");
   strlcpy(out.mode, mode, sizeof(out.mode));
   strlcpy(out.manual, manual, sizeof(out.manual));
   strlcpy(out.autoSource, source, sizeof(out.autoSource));
-  out.threshold = doc["threshold"] | 30.0f;
-  out.hysteresis = doc["hysteresis"] | 1.0f;
-  out.maxDuration = doc["maxDuration"] | 120;
-  out.cooldown = doc["cooldown"] | 60;
-  out.slotCount = doc["schN"] | 0;
-  out.legacySchedule = legacy;
+  out.threshold = policyV2 ? (doc[prefix+"Threshold"] | (out.useThi ? 72.0f : 30.0f)) : (doc["threshold"] | 30.0f);
+  out.hysteresis = policyV2 ? (doc[prefix+"Hysteresis"] | (out.useThi ? 2.0f : 1.0f)) : (doc["hysteresis"] | 1.0f);
+  out.maxDuration = policyV2 ? (doc[prefix+"MaxDuration"] | 120) : (doc["maxDuration"] | 120);
+  out.cooldown = policyV2 ? (doc[prefix+"Cooldown"] | 60) : (doc["cooldown"] | 60);
+  out.slotCount = policyV2 ? (doc[prefix+"SchN"] | 0) : (doc["schN"] | 0);
+  out.legacySchedule = !policyV2 && legacy;
   out.legacyDuration = doc["schDur"] | 10;
   strlcpy(out.legacyStart, doc["schStart"] | "12:00", sizeof(out.legacyStart));
-  if (!usableTemperature(out.threshold) || !isfinite(out.hysteresis) || out.hysteresis < 0 ||
+  if (!isfinite(out.threshold) || out.threshold < (out.useThi ? 0 : -55) || out.threshold > (out.useThi ? 120 : 125) || !isfinite(out.hysteresis) || out.hysteresis < 0 ||
       out.hysteresis > 50 || out.maxDuration < 1 || out.maxDuration > 10800 ||
       out.cooldown < 0 || out.cooldown > 10800 || out.slotCount < 0 || out.slotCount > MAX_SLOTS ||
       out.legacyDuration < 1 || out.legacyDuration > 180) return false;
   for (int i = 0; i < out.slotCount; i++) {
     char key[16];
     snprintf(key, sizeof(key), "sch%dDate", i + 1);
-    strlcpy(out.slots[i].date, doc[key] | "", sizeof(out.slots[i].date));
+    strlcpy(out.slots[i].date, doc[policyV2 ? prefix+"S"+String(key).substring(1) : String(key)] | "", sizeof(out.slots[i].date));
     snprintf(key, sizeof(key), "sch%dStart", i + 1);
-    strlcpy(out.slots[i].start, doc[key] | "", sizeof(out.slots[i].start));
+    strlcpy(out.slots[i].start, doc[policyV2 ? prefix+"S"+String(key).substring(1) : String(key)] | "", sizeof(out.slots[i].start));
     snprintf(key, sizeof(key), "sch%dDur", i + 1);
-    out.slots[i].duration = doc[key] | 10;
+    out.slots[i].duration = doc[policyV2 ? prefix+"S"+String(key).substring(1) : String(key)] | 10;
     if (out.slots[i].duration < 1 || out.slots[i].duration > 180) return false;
   }
   return true;
@@ -618,6 +643,14 @@ bool parseControl(const String &body, ControlConfig &out) {
 void createDefaultControl() {
   JsonDocument doc;
   doc["mode"] = "auto";
+  doc["controlPolicyVersion"] = CONTROL_POLICY_VERSION;
+  doc["controlBasis"] = "temperature";
+  doc["tempThreshold"] = 30.0; doc["thiThreshold"] = 72.0;
+  doc["tempHysteresis"] = 1.0; doc["thiHysteresis"] = 2.0;
+  doc["tempMaxDuration"] = doc["thiMaxDuration"] = 120;
+  doc["tempCooldown"] = doc["thiCooldown"] = 60;
+  doc["tempAutoSrc"] = doc["thiAutoSrc"] = "threshold";
+  doc["tempSchN"] = doc["thiSchN"] = 0;
   doc["autoSrc"] = "threshold";
   doc["manualSsr"] = "off";
   doc["threshold"] = 30.0;
@@ -630,6 +663,36 @@ void createDefaultControl() {
   String body;
   serializeJson(doc, body);
   fbWrite("control", body);
+}
+
+bool usableStationMac(const uint8_t *mac) {
+  if (mac[0] & 1U) return false; // MAC station harus unicast, bukan broadcast/multicast.
+  for (int i = 0; i < 6; i++) if (mac[i] != 0) return true;
+  return false;
+}
+
+void printPairingInfo() {
+  uint8_t mac[6] = {};
+  const char *source = "STA driver";
+  esp_err_t result = esp_wifi_get_mac(WIFI_IF_STA, mac);
+  if (result != ESP_OK || !usableStationMac(mac)) {
+    source = "chip-derived STA";
+    result = esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  }
+  if (result != ESP_OK || !usableStationMac(mac)) {
+    Serial.printf("GAGAL membaca MAC STA (kode=%d); jangan salin MAC nol ke kiri.\n", int(result));
+    return;
+  }
+  Serial.printf("MAC STA ESP KANAN: %02X:%02X:%02X:%02X:%02X:%02X (%s)\n",
+    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], source);
+  Serial.printf("Salin ke espkiri_FINAL: const uint8_t RIGHT_MAC[6] = "
+    "{0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X};\n",
+    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  uint8_t channel = 0;
+  wifi_second_chan_t secondary;
+  if (esp_wifi_get_channel(&channel, &secondary) == ESP_OK)
+    Serial.printf("Kanal radio kanan saat ini: %u | konfigurasi ESPNOW_CHANNEL: %u. "
+      "Kiri dan router harus memakai kanal yang sama.\n", channel, ESPNOW_CHANNEL);
 }
 
 void firebaseTask(void *) {
@@ -669,6 +732,7 @@ void firebaseTask(void *) {
     if (!wasConnected) {
       connecting = false;
       Serial.printf("Wi-Fi %s | kanal %d\n", WiFi.localIP().toString().c_str(), WiFi.channel());
+      printPairingInfo(); // Cetak ulang MAC aktual setelah koneksi, bukan hanya saat boot.
       if (WiFi.channel() != ESPNOW_CHANNEL)
         Serial.printf("PERINGATAN: router kanal %d, kiri %u. Samakan kanal!\n", WiFi.channel(), ESPNOW_CHANNEL);
       configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
@@ -713,6 +777,8 @@ void setup() {
   Serial.begin(115200);
   digitalWrite(SSR_PIN, SSR_ACTIVE_HIGH ? LOW : HIGH);
   pinMode(SSR_PIN, OUTPUT);
+  delay(250); // Serial siap; relay sudah dipastikan OFF sebelum menunggu.
+  Serial.printf("SmartCow KANAN | firmware %s | Serial 115200\n", FW_VERSION);
   control = defaultControl();
   lastSprayEnd = millis() - uint32_t(control.cooldown) * 1000UL;
   receiveQueue = xQueueCreate(1, sizeof(ReceivedPacket));
@@ -720,14 +786,13 @@ void setup() {
   snapshotQueue = xQueueCreate(1, sizeof(Snapshot));
   eventQueue = xQueueCreate(16, sizeof(RelayEvent));
   if (!receiveQueue || !controlQueue || !snapshotQueue || !eventQueue) stopWithError("Queue gagal; relay OFF.");
-  WiFi.mode(WIFI_STA);
+  if (!WiFi.mode(WIFI_STA)) stopWithError("Gagal mengaktifkan Wi-Fi STA; relay OFF.");
   WiFi.setSleep(false);
-  Serial.printf("MAC STA ESP KANAN: %s\n", WiFi.macAddress().c_str());
-  Serial.println("Salin MAC ini ke RIGHT_MAC di espkiri_FINAL.");
   if (ESPNOW_CHANNEL < 1 || ESPNOW_CHANNEL > 13 ||
       esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE) != ESP_OK ||
       esp_now_init() != ESP_OK) stopWithError("Gagal memulai ESP-NOW.");
   esp_now_register_recv_cb(onReceive);
+  printPairingInfo();
   beginHumidity();
   scanSensors();
   beginConversion();
@@ -745,7 +810,7 @@ void loop() {
   buildSnapshot(state);
   state.scheduleOn = strcmp(control.mode, "auto") == 0 &&
     strcmp(control.autoSource, "schedule") == 0 && schedActiveNow();
-  applyLogic(state.avg, state.complete, state.scheduleOn);
+  applyLogic(state);
   state.relayOn = relayOn;
   xQueueOverwrite(snapshotQueue, &state);
   if (uint32_t(millis() - lastPrint) >= TELEMETRY_MS) {
@@ -757,6 +822,10 @@ void loop() {
     Serial.printf("H1=%.2f H2=%.2f H3=%.2f H4=%.2f %%RH | valid=%u/4 mask=%u avgRH=%.2f\n",
       state.humidity[0], state.humidity[1], state.humidity[2], state.humidity[3],
       state.humidityValidCount, state.humidityValidMask, state.humidityAvg);
+    Serial.printf("THI=%.2f lengkap=%d | dasar=%s sumber=%s threshold=%.2f hyst=%.2f "
+      "maks=%ds cooldown=%ds jendela=%d\n", state.thi, state.thiComplete,
+      state.useThi ? "THI" : "Suhu", state.autoSource, control.threshold, control.hysteresis,
+      control.maxDuration, control.cooldown, state.scheduleOn);
   }
   delay(5);
 }

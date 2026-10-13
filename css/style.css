@@ -214,7 +214,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 .node-pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted)}
 .node-pill.online{color:var(--green);border-color:#22c55e66}
 .node-pill.online::before{background:var(--green)}
-.summary-grid{grid-template-columns:1.05fr 1.05fr 1.15fr 1fr;gap:14px}
+.summary-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .summary-grid>.card{padding:20px;min-width:0}
 .summary-grid .card-label{line-height:1.5;font-size:10px;letter-spacing:1px}
 .summary-grid .avg-value{font-size:48px;letter-spacing:-1.5px;margin:14px 0}
@@ -227,6 +227,13 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 .summary-grid .mode-btn{min-width:0;padding:10px 6px;font-size:11px;overflow-wrap:anywhere}
 .humidity-summary{border-color:#167d8b;background:linear-gradient(145deg,#103341,#10252e)}
 .humidity-summary .avg-value{color:#67e8f9}
+.thi-summary{background:linear-gradient(145deg,#18362e,#122820);border-color:#267a54}
+.thi-summary .avg-value{color:#86efac}
+.control-section-label{margin:20px 0 10px}
+.basis-selector{margin-top:16px}
+#controlBasisHint,#settingsStatus{line-height:1.7}
+#settingsStatus{color:var(--amber);min-height:20px}
+#firmwareNotice{font-size:12px;margin:12px 0;line-height:1.6}
 .status-pill.neutral{background:var(--card2);color:var(--muted);border:1px solid var(--line)}
 .sprinkler.unknown{color:var(--muted);background:var(--card2);border-color:var(--line)}
 .sprinkler.unknown .dot{background:var(--muted)}
@@ -260,6 +267,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 .chart-controls select{width:auto;font-size:12px}
 .top-right{flex-wrap:wrap}
 @media(max-width:1200px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-head{align-items:flex-start;flex-direction:column}.auth-panel{grid-template-columns:1fr}}
+@media(min-width:1201px){.summary-grid>.card:nth-child(4){grid-column:span 2}}
+@media(min-width:381px) and (max-width:1200px){.summary-grid>.card:last-child{grid-column:span 2}}
 @media(max-width:700px){.container{padding:16px;gap:18px}.overview-head h2{font-size:25px}.brand h1{font-size:17px}.brand p{font-size:11px}.logo{width:46px;height:46px;font-size:30px;border-radius:14px}.top-right{width:100%;gap:8px}.clock-card{min-width:0;flex:1}.clock{font-size:22px}.date-line{font-size:10px}.badge{font-size:9px;padding:8px 10px}.summary-grid>.card{padding:14px}.summary-grid .avg-value{font-size:36px}.summary-grid .avg-value .unit{font-size:15px}.mini-stats{flex-wrap:wrap}.sensor-section{padding:14px}.humidity-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sensor .s-temp{font-size:25px}.sensor-meta{font-size:8px}.login-form{flex-wrap:wrap}.login-form label{flex-basis:40%}.login-form .btn{width:100%}.toolbar{flex-wrap:wrap}.section-title .hint{font-size:10px}}
 @media(max-width:380px){.summary-grid{grid-template-columns:1fr}.brand{gap:8px}.logo{display:none}.sensor{padding:12px 10px}}
 
@@ -296,6 +305,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
 [data-theme="light"] .humidity-summary{background:linear-gradient(145deg,#ecfeff,#cffafe);border-color:#67e8f9}
 [data-theme="light"] .humidity-summary .avg-value,[data-theme="light"] .humidity-sensor .s-temp,[data-theme="light"] .humidity-section .eyebrow{color:#0e7490}
 [data-theme="light"] .humidity-sensor{background:linear-gradient(145deg,#ffffff,#ecfeff)}
+[data-theme="light"] .thi-summary{background:linear-gradient(145deg,#f0fdf4,#dcfce7);border-color:#86efac}
+[data-theme="light"] .thi-summary .avg-value{color:#15803d}
 [data-theme="light"] .s-state.off{background:#e2e8f0;color:#475569}
 [data-theme="light"] .badge.offline{background:#fef3c7;color:#92400e;border-color:#fcd34d}
 

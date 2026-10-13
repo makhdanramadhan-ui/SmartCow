@@ -19,12 +19,22 @@
     return 'threshold';
   }
   function decideAuto(avg, on, cfg, schedActive) {
-    if (autoSrcOf(cfg) === 'schedule') {
-      if (schedActive && !on) return 'on';
-      if (!schedActive && on) return 'off';
-      return 'stay';
-    }
+    if (autoSrcOf(cfg) === 'schedule' && !schedActive) return on ? 'off' : 'stay';
     return decideSprinkler(avg, on, cfg);
+  }
+  // THI agregat: T = rata-rata DS (°C), RH = rata-rata DHT (%), bukan suhu DHT.
+  function thiOf(t, rh) {
+    if (typeof t !== 'number' || !Number.isFinite(t) || t < -55 || t > 125 ||
+        typeof rh !== 'number' || !Number.isFinite(rh) || rh < 0 || rh > 100) return null;
+    return (1.8*t+32) - (0.55-0.0055*rh)*(1.8*t-26);
+  }
+  // Seam kebijakan yang juga diterapkan ESP kanan; tidak menulis relay dari browser.
+  function decideAutomatic(value, on, cfg, state) {
+    if (!state.complete || typeof value !== 'number' || !Number.isFinite(value)) return 'off';
+    if (autoSrcOf(cfg) === 'schedule' && !state.scheduleActive) return 'off';
+    if (on && state.runSeconds >= cfg.maxDuration) return 'off';
+    if (!on && state.offSeconds < cfg.cooldown) return 'stay';
+    return decideSprinkler(value, on, cfg);
   }
   function classify(avg, cfg) {
     if (avg >= cfg.threshold + 1) return 'bahaya';
@@ -105,7 +115,7 @@
     if (nowMs < t0 + s.dur * 60000) return 'active';
     return 'past';
   }
-  // true bila ada SATU slot pun yang sedang berjalan. Durasi tiap slot = lama nyala (tanpa cooldown).
+  // true bila ada SATU jendela jadwal aktif; bukan perintah paksa ON.
   function anyScheduleActive(nowMs, slots) {
     return (slots || []).some((s) => slotState(s, nowMs) === 'active');
   }
@@ -149,5 +159,5 @@
     const st = r.avg >= threshold ? 'PANAS' : 'NORMAL';
     return `"${w}",${r.s.join(',')},${r.avg},${st},${r.spray ? 'ON' : 'OFF'}`;
   }
-  return { decideSprinkler, decideAuto, autoSrcOf, classify, avgOf, pruneLogs, logToCsv, hmToMin, scheduleActive, schedulesOf, anyScheduleActive, nextSchedule, prunePastSlots, slotState, wibDateStr, wibDateTimeMs, formatIDDate, formatIDSlot, sensorTitle, visibleCount };
+  return { decideSprinkler, decideAuto, decideAutomatic, thiOf, autoSrcOf, classify, avgOf, pruneLogs, logToCsv, hmToMin, scheduleActive, schedulesOf, anyScheduleActive, nextSchedule, prunePastSlots, slotState, wibDateStr, wibDateTimeMs, formatIDDate, formatIDSlot, sensorTitle, visibleCount };
 });

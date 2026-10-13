@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const T = require('../js/telemetry.js');
+const SCS = require('../js/core.js');
 const now = 1791800000000;
 const sample = (extra = {}) => ({
   ts: now, measuredTs: now, schemaVersion: 3, n: 6,
@@ -66,4 +67,24 @@ test('log rows normalize at measurement time instead of becoming stale today', (
 });
 test('unreasonable future timestamp is not live', () => {
   assert.equal(T.view(sample({ts:now+60000,measuredTs:now+60000}),now).online,false);
+});
+test('aggregate THI uses six DS average and all four RH, ignoring companion DHT temperatures', () => {
+  const v=T.view(sample({d1:0,d2:10,d3:20,d4:40,thi:999}),now);
+  assert.equal(v.thiComplete,true); assert.equal(v.thi,SCS.thiOf(32.5,75));
+});
+test('missing or stale DS/RH blocks THI instead of calculating from partial averages', () => {
+  for(const extra of [{validMask:31},{humidityValidMask:7},
+    {humidityAgeMs:[7000,100,100,100]},{temperatureAgeMs:[3000,100,100,100,100,100]},
+    {ts:now-16000,measuredTs:now-16000}]) {
+    const v=T.view(sample(extra),now);
+    assert.equal(v.thiComplete,false); assert.equal(v.thi,null);
+  }
+});
+test('missing RH does not block temperature completeness', () => {
+  const v=T.view(sample({humidityValidMask:0}),now);
+  assert.equal(v.complete,true); assert.equal(v.avg,32.5); assert.equal(v.thi,null);
+});
+test('log THI is recalculated from valid measurement-time channels and preserves basis', () => {
+  const r=T.logRow(sample({ts:now-60000,measuredTs:now-60000,controlBasis:'thi',controlPolicyVersion:2}));
+  assert.equal(r.thi,SCS.thiOf(32.5,75)); assert.equal(r.controlBasis,'thi');
 });

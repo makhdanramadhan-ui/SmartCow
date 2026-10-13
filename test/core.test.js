@@ -72,9 +72,11 @@ test('mode eksklusif: threshold abaikan jadwal', () => {
   assert.equal(SCS.decideAuto(29.0, true, cfg, true), 'off');
 });
 
-test('mode eksklusif: schedule abaikan suhu', () => {
+test('jadwal adalah jendela waktu, tetap mengikuti threshold', () => {
   const cfg = { threshold: 30.0, hysteresis: 1.0, autoSrc: 'schedule' };
-  assert.equal(SCS.decideAuto(25.0, false, cfg, true), 'on');
+  assert.equal(SCS.decideAuto(25.0, false, cfg, true), 'stay');
+  assert.equal(SCS.decideAuto(30.0, false, cfg, true), 'on');
+  assert.equal(SCS.decideAuto(29.0, true, cfg, true), 'off');
   assert.equal(SCS.decideAuto(35.0, true, cfg, false), 'off');
   assert.equal(SCS.decideAuto(35.0, true, cfg, true), 'stay');
 });

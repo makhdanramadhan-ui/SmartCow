@@ -1,9 +1,9 @@
 // Normalisasi sensor dan freshness. Tidak mengganti data hilang dengan nol.
 (function (root, factory) {
-  const api = factory();
+  const api = factory(typeof module !== 'undefined' && module.exports ? require('./core.js') : root.SCS);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SCSTelemetry = api;
-})(typeof self !== 'undefined' ? self : globalThis, () => {
+})(typeof self !== 'undefined' ? self : globalThis, (SCS) => {
   const finite = (v) => typeof v === 'number' && Number.isFinite(v);
   const temperature = (v) => finite(v) && v >= -55 && v <= 125;
   const humidity = (v) => finite(v) && v >= 0 && v <= 100;
@@ -46,7 +46,9 @@
     const backendCount = Number.isInteger(raw.validCount) ? raw.validCount : validCount;
     const avg = validCount && backendCount === validCount && temperature(raw.avg) ? raw.avg : average(s);
     const leftAge = finite(raw.leftAgeMs) ? raw.leftAgeMs + elapsed : null;
-    return { s, h, d, avg, humidityAvg: average(h), validCount, humidityValidCount,
+    const humidityAvg=average(h), thiComplete=validCount===6 && humidityValidCount===4;
+    return { s, h, d, avg, humidityAvg, thi:thiComplete ? SCS.thiOf(avg,humidityAvg) : null, thiComplete, validCount, humidityValidCount,
+      controlPolicyVersion:raw.controlPolicyVersion || 0, controlBasis:raw.controlBasis === 'thi' ? 'thi' : 'temperature',
       complete: validCount === 6, humidityComplete: humidityValidCount === 4,
       dsStates, rhStates, online, age, ts: raw.ts || null,
       leftOnline: online && raw.leftOnline === true && (leftAge === null || leftAge < 10000),
@@ -54,7 +56,8 @@
   }
   function logRow(raw) {
     const v = view(raw, raw.ts);
-    return { t: raw.ts, s: v.s, h: v.h, d: v.d, avg: v.avg, humidityAvg: v.humidityAvg,
+    return { t: raw.ts, s: v.s, h: v.h, d: v.d, avg: v.avg, humidityAvg: v.humidityAvg,thi:v.thi,
+      controlBasis:v.controlBasis,
       spray: raw.ssr === 1 ? 1 : 0, validMask: raw.validMask, humidityValidMask: raw.humidityValidMask };
   }
   return { view, logRow, finite, average };

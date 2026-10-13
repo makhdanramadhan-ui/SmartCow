@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Smart Cow Sprinkler System</title>
-<link rel="stylesheet" href="css/style.css?v=34" />
+<link rel="stylesheet" href="css/style.css?v=35" />
 </head>
 <body>
 <div class="bg-decor"></div>
@@ -41,7 +41,7 @@
 <main class="container">
 
   <section class="overview-head" data-page="dash">
-    <div><div class="eyebrow">SMARTCOW / MONITORING</div><h2>Iklim kandang, dalam satu layar.</h2><p class="hint">Suhu DS untuk sprinkler · Kelembapan DHT untuk pemantauan lingkungan</p></div>
+    <div><div class="eyebrow">SMARTCOW / MONITORING</div><h2>Iklim kandang, dalam satu layar.</h2><p class="hint">Suhu DS + kelembapan DHT · kontrol otomatis berdasarkan Suhu atau THI</p></div>
     <div class="node-pills"><span id="rightNode" class="node-pill">ESP kanan · menunggu</span><span id="leftNode" class="node-pill">ESP kiri · menunggu</span></div>
   </section>
   <section id="authPanel" class="card auth-panel">
@@ -72,7 +72,14 @@
       <div class="avg-value"><span id="avgHumidity">--.-</span><span class="unit">%RH</span></div>
       <div id="humidityStatus" class="status-pill neutral">MENUNGGU DATA</div>
       <div class="mini-stats"><div>Min <b id="minHumidity">--</b></div><div>Max <b id="maxHumidity">--</b></div></div>
-      <p id="rhSummary" class="hint">0/4 sensor valid · tidak mengontrol relay</p>
+      <p id="rhSummary" class="hint">0/4 sensor valid · input RH untuk THI</p>
+    </div>
+    <div class="card thi-summary">
+      <div class="card-label">🌿 THI agregat kandang</div>
+      <div class="avg-value"><span id="thiValue">—</span><span class="unit">THI</span></div>
+      <div id="thiStatus" class="status-pill neutral">MENUNGGU DATA</div>
+      <div class="mini-stats"><div>Threshold THI <b id="thiThresholdLabel">72.0</b></div></div>
+      <p id="thiSummary" class="hint">Rata-rata 6 DS + RH rata-rata 4 DHT · bukan THI tiap titik</p>
     </div>
     <div class="card">
       <div class="card-label">Sprinkler · ESP kanan</div>
@@ -106,7 +113,7 @@
   <section class="sensor-section humidity-section" data-page="dash">
     <div class="section-title"><div><div class="eyebrow">HUMIDITY / DHT22</div><h2>4 titik kelembapan udara</h2></div><span id="humidityCount" class="hint">0/4 valid</span></div>
     <div id="humidityGrid" class="grid humidity-grid"></div>
-    <p class="hint">RH dibaca DHT22; suhu DHT ditampilkan sebagai pembanding, tidak masuk rata-rata DS. THI belum dihitung sebelum pasangan lokasi DS–DHT ditentukan.</p>
+    <p class="hint">THI agregat memakai suhu rata-rata 6 DS dan RH rata-rata 4 DHT, bukan suhu DHT. THI tersedia jika 10 sensor valid/fresh; bukan diagnosis stres atau THI tiap titik.</p>
   </section>
 
   <!-- GRAFIK + KONTROL -->
@@ -115,31 +122,39 @@
       <div class="card-head">
         <div>
           <h3>📈 Tren lingkungan kandang</h3>
-          <p class="hint">Suhu DS &amp; kelembapan DHT · celah berarti data tidak tersedia</p>
+          <p class="hint">Suhu DS, kelembapan DHT &amp; THI agregat · celah berarti data tidak tersedia</p>
         </div>
         <div class="legend" id="legend"></div>
       </div>
       <canvas id="chart" height="220"></canvas>
       <div class="chart-controls">
-        <select id="chartMetric" aria-label="Jenis grafik"><option value="temperature">Suhu DS (°C)</option><option value="humidity">Kelembapan DHT (%RH)</option></select>
+        <select id="chartMetric" aria-label="Jenis grafik"><option value="temperature">Suhu DS (°C)</option><option value="humidity">Kelembapan DHT (%RH)</option><option value="thi">THI agregat</option></select>
         <label><input type="checkbox" id="showAvg" checked /> Rata-rata</label>
         <button id="btnClearChart" class="btn small">Bersihkan Grafik</button>
       </div>
     </div>
 
     <div class="card">
-      <h3>⚙️ Pengaturan Otomatis — Pilih Salah Satu</h3>
+      <h3>⚙️ Dasar kontrol sprinkler</h3>
+      <div class="auto-src basis-selector">
+        <label class="src-card"><input type="radio" name="controlBasis" id="basisTemperature" value="temperature" checked /><div><b>🌡️ Suhu DS</b><span>Wajib 6 DS valid</span></div></label>
+        <label class="src-card"><input type="radio" name="controlBasis" id="basisThi" value="thi" /><div><b>🌿 THI agregat</b><span>Wajib 6 DS + 4 DHT valid</span></div></label>
+      </div>
+      <p id="controlBasisHint" class="hint">Hanya profil dasar terpilih yang mengendalikan relay. Profil Suhu dan THI tersimpan terpisah.</p>
+      <div id="firmwareNotice" class="notice" role="status" hidden>Upload firmware kanan v3.1 terlebih dahulu. Firmware lama belum menjalankan kontrol THI/jadwal bersyarat.</div>
+      <div id="settingsStatus" class="hint" role="status"></div>
+      <div class="eyebrow control-section-label">CARA MENJALANKAN</div>
       <div class="auto-src">
         <label class="src-card"><input type="radio" name="autoSrc" id="srcThreshold" value="threshold" checked />
-          <div><b>🌡️ Berdasarkan Suhu</b><span>Threshold suhu</span></div>
+          <div><b>Sepanjang waktu</b><span>Ikuti threshold dasar terpilih</span></div>
         </label>
         <label class="src-card"><input type="radio" name="autoSrc" id="srcSchedule" value="schedule" />
-          <div><b>🗓️ Jadwal Harian</b><span>Tanggal + jam bebas</span></div>
+          <div><b>🗓️ Dalam jadwal</b><span>Threshold + jendela waktu</span></div>
         </label>
       </div>
       <div id="threshGroup">
       <div class="form-grid">
-        <label>Threshold semprot (°C)
+        <label><span id="thresholdInputLabel">Threshold semprot suhu (°C)</span>
           <input id="inThreshold" type="number" step="0.1" min="20" max="40" value="30.0" />
         </label>
       </div>
@@ -149,23 +164,24 @@
       </div>
       <div id="protectGroup">
       <div class="form-grid">
+        <label><span id="hysteresisInputLabel">Hysteresis (°C)</span><input id="inHysteresis" type="number" min="0" max="50" step="0.1" value="1" /></label>
         <label>Durasi semprot maks (detik)
-          <input id="inMaxDur" type="number" step="1" min="10" max="600" value="120" />
+          <input id="inMaxDur" type="number" step="1" min="1" max="10800" value="120" />
         </label>
         <label>Cooldown antar semprot (detik)
-          <input id="inCooldown" type="number" step="1" min="0" max="600" value="60" />
+          <input id="inCooldown" type="number" step="1" min="0" max="10800" value="60" />
         </label>
       </div>
       </div>
-      <button id="btnSaveCfg" class="btn blue full">💾 Simpan Pengaturan</button>
       <div class="sched-box" id="schedGroup">
         <div class="sched-head">
-          <span>Jadwal semprot bertanggal (maks 6×)</span>
+          <span id="scheduleTitle">Jendela jadwal Suhu (maks 6×)</span>
           <button id="btnAddSched" class="btn small">＋ Tambah</button>
         </div>
         <div id="schedList"></div>
         <div id="schedHint" class="hint"></div>
       </div>
+      <button id="btnSaveCfg" class="btn blue full">💾 Simpan Pengaturan</button>
     </div>
   </section>
 
@@ -173,7 +189,7 @@
   <section class="card" data-page="log">
     <div class="card-head">
       <div>
-         <h3>🧾 Riwayat suhu &amp; kelembapan</h3>
+          <h3>🧾 Riwayat suhu, kelembapan &amp; THI</h3>
          <p class="hint">Log ESP kanan tiap 30 detik · 120 baris terakhir · nilai hilang tidak dianggap nol</p>
       </div>
       <div class="toolbar">
@@ -192,7 +208,7 @@
           <tr id="logHead"></tr>
         </thead>
         <tbody id="logBody">
-           <tr><td colspan="15" class="empty">Belum ada riwayat sensor.</td></tr>
+            <tr><td colspan="16" class="empty">Belum ada riwayat sensor.</td></tr>
         </tbody>
       </table>
     </div>
@@ -231,10 +247,11 @@
     </div>
   </div>
 </div>
-<script src="js/core.js?v=34"></script>
-<script src="js/telemetry.js?v=34"></script>
-<script src="js/config.js?v=34"></script>
-<script src="js/firebase-public.js?v=34"></script>
+<script src="js/core.js?v=35"></script>
+<script src="js/control.js?v=35"></script>
+<script src="js/telemetry.js?v=35"></script>
+<script src="js/config.js?v=35"></script>
+<script src="js/firebase-public.js?v=35"></script>
 <script>
 window.addEventListener('error', function (e) {
   if (!window.SCSFirebase && e.message && e.message !== 'Script error.') {
@@ -243,7 +260,7 @@ window.addEventListener('error', function (e) {
   }
 }, true);
 </script>
-<script type="module" src="js/firebase.js?v=34"></script>
-<script src="js/app.js?v=34"></script>
+<script type="module" src="js/firebase.js?v=35"></script>
+<script src="js/app.js?v=35"></script>
 </body>
 </html>

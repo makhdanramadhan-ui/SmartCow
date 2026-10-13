@@ -5,6 +5,7 @@
 | Folder/file | Fungsi |
 |---|---|
 | `espkanan_FINAL/espkanan_FINAL.ino` | 3 DS + 2 DHT lokal, receiver kiri, SSR dan Firebase |
+| `espkanan_FINAL/ClimatePolicy.h` | Rumus THI dan kebijakan threshold/jadwal; wajib berada bersama sketch kanan |
 | `espkiri_FINAL/espkiri_FINAL.ino` | 3 DS + 2 DHT, sender ESP-NOW tanpa login router/Firebase |
 | `espkanan/espkanan.ino`, `espkiri/espkiri.ino` | Varian DS-only sebelumnya, tetap dipertahankan |
 | `espkanan_testDHT22/espkanan_testDHT22.ino`, `espkiri_testDHT22/espkiri_testDHT22.ino` | Tes DHT mandiri melalui Serial, pin GPIO4/14, bukan pin FINAL |
@@ -13,6 +14,8 @@
 FINAL menggantikan/merename **plusAHT** sesuai permintaan. Tidak ada pembacaan AHT/BMP280 dalam FINAL. Setiap sketch memiliki folder senama, jangan menggabungkan beberapa `.ino` dalam satu folder.
 
 Target **ESP32 klasik/WROOM-32, ESP32 Dev Module**. Paket FINAL **versi 3, 56 byte**, sama persis pada kedua sisi; tidak kompatibel dengan paket DS-only v1 atau AHT v2. ACK, boot ID, sequence, dan tiga retry tetap tersedia.
+
+Kanan **v3.1** menambah kontrol Suhu/THI dan jadwal bersyarat. **Upload ulang kanan**, termasuk header di folder yang sama. Kiri FINAL v3 tidak berubah dan tetap kompatibel. Web hanya mengizinkan Simpan/aktivasi otomatis baru setelah mendapat telemetry fresh `controlPolicyVersion=2`. Setting suhu lama tetap dibaca; jadwal pada v3.1 tidak lagi paksa ON.
 
 ## 1. Wiring
 
@@ -39,6 +42,7 @@ Target **ESP32 klasik/WROOM-32, ESP32 Dev Module**. Paket FINAL **versi 3, 56 by
 1. Router **2,4 GHz**, pilih kanal tetap, misalnya 6. Isi `ESPNOW_CHANNEL` sama pada kedua sketch.
 2. Kanan login router; kiri mengirim ESP-NOW langsung ke **MAC STA kanan**, bukan MAC router.
 3. Upload kanan terlebih dahulu, lihat `MAC STA ESP KANAN` pada Serial **115200**.
+   Kanan v3.1.1 memvalidasi pembacaan MAC, memakai cadangan MAC STA turunan chip bila perlu, dan mencetak ulang setelah Wi-Fi terhubung. Format `RIGHT_MAC` siap salin juga dicetak. Buka Serial Monitor sebelum menekan EN/RESET; jangan menyalin `00:00:00:00:00:00`. `LEFT_MAC={0,...}` di kode kanan adalah placeholder opsional, bukan MAC kanan.
 4. Isi pada kiri, contoh format (bukan MAC asli):
 
    ```cpp
@@ -74,7 +78,8 @@ Database/project tetap `smartcow-de25f`, device `cow-sprinkler-01`; hanya kanan 
 - Angka DS terakhir atau -127 masih bisa tersimpan saat invalid; **mask/usia** menentukan kelayakan. RH/DHT invalid diserialisasi null dan bisa hilang dari RTDB. Jangan anggap field hilang = nol.
 - **Nol DS valid:** FINAL tetap memperbarui latest/log/status, `avg` tidak ada. Rules baru mendukung kondisi ini tanpa suhu palsu, sehingga DHT/relay tetap dapat dipantau. Varian DS-only lama masih melewati latest/log saat semua DS invalid.
 - Dashboard baru membaca mask dan freshness; enam/empat kartu tidak hilang saat sensor putus. Data kedaluwarsa tidak ditandai LIVE dan status relay lama tidak dianggap status kini.
-- THI belum dihitung: pasangan lokasi DS–DHT belum ditentukan. Suhu DHT hanya pembanding; **bukan sumber suhu kontrol**.
+- **THI agregat** dihitung dari rata-rata 6 DS (T °C) dan rata-rata 4 RH (%): `(1.8*T+32) - (0.55-0.0055*RH)*(1.8*T-26)`. Contoh 30 °C + 70%RH → **81,38**. `thi` hanya tersedia bila `thiComplete=true` (10 input valid/fresh). Tidak memakai suhu DHT, tidak memerlukan pairing per titik; ini pendekatan agregat, bukan THI lokal/diagnosis stres.
+- Telemetry/status juga melaporkan `controlPolicyVersion=2` dan `controlBasis=temperature|thi` yang sedang diterapkan. Web menghitung ulang THI dengan freshness kanal, bukan menampilkan THI lama saat input hilang.
 
 Lokasi Firebase:
 
@@ -86,7 +91,10 @@ devices/cow-sprinkler-01/{telemetry/latest, telemetry/log, control, events, stat
 
 - **Auto suhu:** wajib keenam DS valid/fresh. Kurang satu atau kiri stale → OFF. Tidak ada fallback kanan saja. DHT gagal tidak memblokir jika 6 DS lengkap.
 - Default threshold **30 °C**, hysteresis **1 °C**, maksimum nyala **120 detik**, cooldown **60 detik**. Setting berasal dari control Firebase.
-- **Manual ON bertahan sampai OFF**, termasuk saat internet putus. Jadwal mengikuti durasi slot dan membutuhkan NTP. **Manual/jadwal tidak memakai** syarat suhu lengkap atau batas maksimum/cooldown auto suhu.
+- **Auto THI:** wajib 6 DS + 4 RH valid/fresh. Kurang satu → OFF. Default contoh threshold **72**, hysteresis **2 poin THI**, durasi maksimum **120 detik**, cooldown **60 detik**. Angka THI perlu disesuaikan dengan protokol evaluasi kandang.
+- **Jadwal mengikuti dasar terpilih**: Suhu saja atau THI saja. Slot merupakan jendela waktu bertanggal WIB, membutuhkan NTP, dan boleh melintasi tengah malam. Di dalam slot relay tetap mengikuti threshold/hysteresis, kelengkapan input, maksimum durasi dan cooldown; di luar slot selalu OFF. Contoh THI 68, threshold 72, slot 14:00–14:10 → tetap OFF. Jika THI ≥72 relay boleh ON; berakhir paling lambat 14:10. Nilai tetap tinggi bisa memicu siklus baru setelah cooldown selama jendela aktif.
+- **Manual ON bertahan sampai OFF**, termasuk saat internet putus. Hanya manual yang melewati kelengkapan sensor, maksimum durasi dan cooldown otomatis.
+- Profil Suhu dan THI memiliki setting/jadwal terpisah. Control v2 memakai awalan `temp`/`thi` (mis. `tempThreshold`, `thiThreshold`, `tempSchN`, `thiSch1Date/Start/Dur`). Field legacy selalu profil suhu; THI 72 tidak pernah dikirim sebagai suhu 72 °C. Edit web tidak diterapkan sampai **Simpan Pengaturan**; pindah Manual/Otomatis langsung memakai profil terapan terakhir.
 - Boot relay OFF; kontrol kembali default sampai Firebase terbaca, belum ada persistensi setting tahan reboot. Internet putus tidak otomatis menghentikan kontrol lokal bila data/link lokal tersedia.
 - HTTP/TLS berjalan di task terpisah; snapshot/konfigurasi ditukar melalui queue. Antrean event offline hanya RAM terbatas, bukan arsip tahan mati daya.
 - Web hanya mengirim pengaturan/manual dan mencerminkan status. Tidak mengirim otomatisasi/auto-off sendiri atau menimpa control saat login.
@@ -109,5 +117,7 @@ Kedua FINAL berhasil dikompilasi terpisah sebagai `.ino`: PlatformIO `esp32dev`,
 6. Semua DS invalid, DHT ada: latest baru dengan `validCount=0`, tanpa avg; RH dan status relay tetap diperbarui.
 7. Putus internet saja/boot tanpa Wi-Fi: sensor dan logika lokal tetap berjalan, HTTP tidak menahan loop; NTP/jadwal punya keterbatasan boot.
 8. Reboot kiri: boot ID baru diterima. Uji router reconnect/kanal dan jarak nyata 15 m saat sapi/orang bergerak.
-9. Uji manual/jadwal secara terpisah, pahami ON yang menetap saat internet/data putus. Tutup browser tidak mematikan relay.
-10. Saat ESP berhenti mengirim, web harus berhenti menunjukkan LIVE; relay menjadi belum diketahui. Jangan sambungkan AC sebelum uji dan keselamatan diperiksa.
+9. Uji THI: bandingkan rumus dengan angka rata-rata DS/RH; lepas satu DHT → auto THI OFF, auto suhu tetap boleh jika DS lengkap. Pindah profil dan pastikan threshold/durasi/cooldown/jadwal terpisah.
+10. Uji jadwal Suhu dan THI: bawah threshold saat slot mulai tetap OFF; ambang tercapai boleh ON; hysteresis/maksimum/cooldown tetap berlaku; akhir slot OFF walau nilai tinggi. Uji slot melewati tengah malam dan NTP belum valid.
+11. Uji manual terpisah, pahami ON menetap saat internet/data putus. Tutup browser tidak mematikan relay.
+12. Saat ESP berhenti mengirim, web harus berhenti menunjukkan LIVE; relay menjadi belum diketahui. Jangan sambungkan AC sebelum uji dan keselamatan diperiksa.
