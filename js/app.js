@@ -24,6 +24,7 @@ const basisUnit = cfg => cfg.controlBasis === 'thi' ? ' THI' : ' °C';
 const metricValue = (view,cfg) => cfg.controlBasis === 'thi' ? view.thi : view.avg;
 const firmwareReady = () => sensorView.online && sensorView.controlPolicyVersion === 2;
 const profileOf = basis => appliedCfg.profiles[basis];
+const isAppliedBasis = basis => controlLoaded && appliedCfg.controlBasis === basis;
 function markSettingsDirty(){ settingsDirty=true; saveCfg(); $('settingsStatus').textContent='Perubahan belum dikirim. Klik Simpan Pengaturan untuk menerapkan.'; }
 
 // ---------- THEME (light/dark) ----------
@@ -94,6 +95,7 @@ function buildLogHead(count){
 function tempColor(t){
   const threshold=profileOf('temperature').threshold;
   const style=getComputedStyle(document.documentElement);
+  if (!isAppliedBasis('temperature')) return style.getPropertyValue('--txt');
   if (t >= threshold + 1) return style.getPropertyValue('--negative-txt');
   if (t >= threshold) return style.getPropertyValue('--warning-txt');
   if (t >= threshold - 1) return style.getPropertyValue('--positive-txt');
@@ -101,6 +103,8 @@ function tempColor(t){
 }
 function renderSensors(){
   const tempProfile=profileOf('temperature'), thiProfile=profileOf('thi');
+  const temperatureActive=isAppliedBasis('temperature'), thiActive=isAppliedBasis('thi');
+  document.querySelectorAll('[data-threshold-basis]').forEach(el=>{ el.hidden=!isAppliedBasis(el.dataset.thresholdBasis); });
   const shown = temps.filter(SCSTelemetry.finite);
   temps.forEach((t,i)=>{
     const el = $('sensor'+i); if(!el) return;
@@ -119,7 +123,8 @@ function renderSensors(){
     const bar = el.querySelector('.bar i');
     bar.style.width = pct+'%'; bar.style.background = tempColor(t);
     const st = el.querySelector('.s-state');
-    if (t >= tempProfile.threshold){ st.textContent = 'PANAS'; st.className = 's-state hot'; }
+    if (!temperatureActive){ st.textContent = 'TERBACA · MONITORING'; st.className = 's-state off'; }
+    else if (t >= tempProfile.threshold){ st.textContent = 'PANAS'; st.className = 's-state hot'; }
     else if (t >= tempProfile.threshold - tempProfile.hysteresis){ st.textContent = 'WASPADA'; st.className = 's-state warn'; }
     else { st.textContent = 'NORMAL'; st.className = 's-state ok'; }
   });
@@ -127,9 +132,10 @@ function renderSensors(){
   $('avgTemp').textContent = fmtValue(avg);
   $('minTemp').textContent = shown.length ? Math.min(...shown).toFixed(1)+'°C' : '—';
   $('maxTemp').textContent = shown.length ? Math.max(...shown).toFixed(1)+'°C' : '—';
-  $('thresholdLabel').textContent = tempProfile.threshold.toFixed(1)+'°C';
+  $('thresholdLabel').textContent = controlLoaded ? tempProfile.threshold.toFixed(1)+'°C' : '—';
   const pill = $('avgStatus');
   if (!SCSTelemetry.finite(avg)){ pill.textContent='DATA BELUM TERSEDIA'; pill.className='status-pill neutral'; }
+  else if (!temperatureActive){ pill.textContent=sensorView.complete ? 'MONITORING SUHU' : 'DATA SUHU PARSIAL · MONITORING'; pill.className='status-pill neutral'; }
   else if (!sensorView.complete){ pill.textContent='DATA PARSIAL · AUTO SUHU DIBLOKIR'; pill.className='status-pill waspada'; }
   else if (avg >= tempProfile.threshold + 1){ pill.textContent='SUHU TINGGI · DI ATAS AMBANG'; pill.className='status-pill bahaya'; }
   else if (avg >= tempProfile.threshold){ pill.textContent='⚠️ WASPADA — AMBANG TERSENTUH'; pill.className='status-pill waspada'; }
@@ -156,11 +162,12 @@ function renderSensors(){
   $('humidityStatus').textContent = sensorView.humidityComplete ? '4 TITIK TERPANTAU' : goodRH.length ? 'DATA KELEMBAPAN PARSIAL' : 'DATA BELUM TERSEDIA';
   $('humidityStatus').className = 'status-pill ' + (sensorView.humidityComplete ? 'normal' : 'neutral');
   $('thiValue').textContent=fmtValue(sensorView.thi);
-  $('thiThresholdLabel').textContent=thiProfile.threshold.toFixed(1);
+  $('thiThresholdLabel').textContent=controlLoaded ? thiProfile.threshold.toFixed(1) : '—';
   $('thiSummary').textContent=`${sensorView.validCount}/6 DS + ${sensorView.humidityValidCount}/4 DHT valid · THI agregat, bukan per titik`;
   const thiPill=$('thiStatus');
-  thiPill.textContent=sensorView.thiComplete ? sensorView.thi>=thiProfile.threshold ? 'THRESHOLD THI TERCAPAI' : 'DI BAWAH THRESHOLD THI' : 'PERLU 6 DS + 4 DHT VALID';
-  thiPill.className='status-pill '+(sensorView.thiComplete ? sensorView.thi>=thiProfile.threshold ? 'waspada' : 'normal' : 'neutral');
+  if (!sensorView.thiComplete){ thiPill.textContent='PERLU 6 DS + 4 DHT VALID'; thiPill.className='status-pill neutral'; }
+  else if (!thiActive){ thiPill.textContent='MONITORING THI'; thiPill.className='status-pill neutral'; }
+  else { thiPill.textContent=sensorView.thi>=thiProfile.threshold ? 'THRESHOLD THI TERCAPAI' : 'DI BAWAH THRESHOLD THI'; thiPill.className='status-pill '+(sensorView.thi>=thiProfile.threshold ? 'waspada' : 'normal'); }
   for (const [id, name, online] of [['rightNode','ESP kanan',sensorView.online],['leftNode','ESP kiri',sensorView.leftOnline]]){
     $(id).textContent = `${name} · ${online ? 'online' : 'belum terhubung'}`; $(id).classList.toggle('online', online);
   }
@@ -253,12 +260,17 @@ function drawChart(){
   if (data.length < 2) return;
   const rh = $('chartMetric').value === 'humidity';
   const thi=$('chartMetric').value==='thi';
+  const showThreshold=!rh && isAppliedBasis(thi ? 'thi' : 'temperature');
   const threshold=profileOf(thi ? 'thi' : 'temperature').threshold;
   const values = (row) => thi ? [row.thi] : rh ? row.h || [] : row.s || [];
   let mn = 99, mx = -99;
   data.forEach(d=>{ values(d).filter(SCSTelemetry.finite).forEach(v=>{mn=Math.min(mn,v);mx=Math.max(mx,v);}); });
   if (rh){ mn = 0; mx = 100; }
-  else { mn = Math.min(mn, threshold-2)-0.3; mx = Math.max(mx, threshold+2)+0.3; }
+  else if (showThreshold){ mn = Math.min(mn, threshold-2)-0.3; mx = Math.max(mx, threshold+2)+0.3; }
+  else {
+    if (mx < mn){ mn=thi ? 60 : 20; mx=thi ? 100 : 40; }
+    mn-=0.3; mx+=0.3;
+  }
   const X = i => 60 + (data[i].t-data[0].t)/Math.max(1,data[data.length-1].t-data[0].t)*(W-80);
   const Y = v => 20 + (1-(v-mn)/(mx-mn))*(H-70);
   // grid + threshold
@@ -266,10 +278,10 @@ function drawChart(){
   for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4, y=Y(v);
     ctx.beginPath(); ctx.moveTo(60,y); ctx.lineTo(W-20,y); ctx.stroke();
     ctx.fillText(v.toFixed(1)+(thi?'':rh?'%':'°'), 4, y+7); }
-  if (!rh){
-   const yT = Y(threshold);
-  ctx.setLineDash([12,8]); ctx.strokeStyle=T.threshold; ctx.lineWidth=2;
-  ctx.beginPath(); ctx.moveTo(60,yT); ctx.lineTo(W-20,yT); ctx.stroke(); ctx.setLineDash([]);
+  if (showThreshold){
+    const yT = Y(threshold);
+    ctx.setLineDash([12,8]); ctx.strokeStyle=T.threshold; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(60,yT); ctx.lineTo(W-20,yT); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle=T.threshold; ctx.fillText('ambang '+threshold.toFixed(1)+(thi?' THI':'°C'), 70, yT-10);
   }
   const draw = (idx, color, get) => {
@@ -855,12 +867,12 @@ function fbConnect(){
     },
     onControl: (ctl)=>{
       if (!fbConnected) return;
-      if (!ctl){ controlLoaded=false; syncButtons(); return; }
+      if (!ctl){ controlLoaded=false; syncButtons(); refreshTelemetry(); drawChart(); return; }
       controlLoaded=true;
       appliedCfg=SCSControl.fromFirebase(ctl);
       if (!settingsDirty && !savingSettings) CFG=SCSControl.normalize(appliedCfg);
       else CFG.mode=appliedCfg.mode;
-      saveCfg(); syncButtons(); refreshTelemetry(); renderLogs();
+      saveCfg(); syncButtons(); refreshTelemetry(); renderLogs(); drawChart();
     },
     onTelemetry: (p)=>{
       if (!fbConnected) return;

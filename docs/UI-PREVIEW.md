@@ -10,6 +10,8 @@ UI v37: sidebar dimulai tertutup di semua ukuran layar. Tombol ☰ kiri atas mem
 
 UI v38: sidebar dan area konten bergerak/fade bersamaan, menu serta halaman masuk bertahap, dan popup sensor memakai fade/geser/scale saat dibuka maupun ditutup. Preferensi **reduced motion** menonaktifkan animasi. Menutup popup lewat logout/perubahan halaman tetap instan agar data privat tidak tertahan selama animasi.
 
+UI v39: ringkasan hanya menampilkan ambang **dasar kontrol tersimpan** (Suhu atau THI), sesuai threshold pengguna. Dasar lain tetap menampilkan pembacaan untuk monitoring tanpa membandingkan ambang; detail DS juga memakai status/warna netral saat THI dipilih. Grafik hanya menggambar garis ambang bila metriknya sama dengan dasar kontrol tersimpan. Draft belum mengubah ringkasan/grafik; sebelum konfigurasi Firebase dimuat, kedua ambang disembunyikan. Kebijakan kontrol, tombol mode ketika ESP offline, dan firmware tidak berubah.
+
 ## Membuka preview
 
 Dari folder proyek, jalankan:
@@ -44,12 +46,14 @@ Revisi v37 (sidebar/popup/urutan kartu) juga disetujui untuk langsung push dan d
 
 Revisi v38 (motion/pemulihan sesi tanpa login flash) disetujui untuk langsung push dan deploy. Arsip v37: `smartcow-v37-sebelum-motion-session-20261013-200840.zip`.
 
+Revisi v39 (ambang hanya untuk dasar kontrol tersimpan) mengikuti persetujuan langsung push dan deploy. Arsip v38: `smartcow-v38-sebelum-ambang-terpilih-20261014-104938.zip`.
+
 Backup sebelum revisi final/publikasi tersedia lokal di `F:\apaelah\TUGAS\smt5\IoT\web projek IoT_Backup\smartcow-sebelum-deploy-20261013-121706`: snapshot lengkap proyek dan arsip commit lama `dcf8657`. Snapshot lokal mengandung kredensial privat; jangan unggah folder backup.
 
 ## Tes lokal
 
 ```powershell
-node --test test/core.test.js test/telemetry.test.js test/control.test.js test/preview.test.js
+node --test test/core.test.js test/telemetry.test.js test/control.test.js test/preview.test.js test/ui-threshold.test.js
 ```
 
-Tes preview memeriksa dashboard tersembunyi sejak HTML, ID elemen, ilustrasi mandiri, dan server lokal yang menolak akses ke firmware/konfigurasi privat serta request tulis. Tes THI dan kebijakan kontrol yang sudah ada tetap dipertahankan.
+Tes preview memeriksa dashboard tersembunyi sejak HTML, ID elemen, ilustrasi mandiri, dan server lokal yang menolak akses ke firmware/konfigurasi privat serta request tulis. Tes UI ambang menjalankan fungsi render asli untuk memeriksa dasar tersimpan/draft, nilai pengguna, monitoring netral, data hilang, serta garis grafik. Tes THI dan kebijakan kontrol yang sudah ada tetap dipertahankan.

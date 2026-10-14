@@ -66,6 +66,11 @@ test('sidebar starts closed and inert, with an accessible toggle', () => {
   assert.match(html, /id="menuBtn"[^>]*aria-controls="sidebar"[^>]*aria-expanded="false"/);
 });
 
+test('threshold summaries start hidden with no hard-coded default values', () => {
+  assert.match(html, /<div data-threshold-basis="temperature" hidden>Ambang suhu <b id="thresholdLabel">—<\/b>/);
+  assert.match(html, /<div class="mini-stats" data-threshold-basis="thi" hidden><div>Ambang THI <b id="thiThresholdLabel">—<\/b>/);
+});
+
 test('local illustration is self-contained and contains no script or remote resource', () => {
   const svg = fs.readFileSync(path.join(root, 'assets/farm-scene.svg'), 'utf8');
   assert.match(svg, /<svg /);
@@ -94,7 +99,7 @@ test('preview HTTP server serves only runtime assets and refuses writes/private 
   assert.equal(page.headers.get('cache-control'), 'no-store');
   assert.match(await page.text(), /id="appShell" class="app-shell" hidden inert/);
   assert.equal((await fetch(origin + '/assets/farm-scene.svg')).status, 200);
-  assert.equal((await fetch(origin + '/js/app.js?v=38')).status, 200);
+  assert.equal((await fetch(origin + '/js/app.js?v=39')).status, 200);
   const head = await fetch(origin + '/index.html', { method: 'HEAD' });
   assert.equal(head.status, 200); assert.equal(await head.text(), '');
   for (const name of ['/.git/config', '/js/firebase-config.js', '/database.rules.json',
