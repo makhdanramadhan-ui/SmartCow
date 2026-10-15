@@ -10,7 +10,7 @@
   <script>
   try { document.documentElement.dataset.theme = localStorage.getItem('scs_theme') === 'dark' ? 'dark' : 'light'; } catch {}
   </script>
-  <link rel="stylesheet" href="css/style.css?v=42" />
+  <link rel="stylesheet" href="css/style.css?v=43" />
 </head>
 <body>
 <!-- Local icon set: no remote font or icon library required. -->
@@ -33,6 +33,7 @@
   <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
   <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 4H4v16h6M9 12h12m-5-5 5 5-5 5"/></symbol>
+  <symbol id="i-user-add" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M19 7v6M16 10h6"/></symbol>
 </svg>
 
 <!-- Neither login nor private content is shown until Firebase resolves the session. -->
@@ -169,24 +170,27 @@
 
       <section class="page-heading" data-page="event"><div><div class="eyebrow">SISTEM / AKTIVITAS</div><h1>Aktivitas sprinkler<span class="heading-period">.</span></h1><p>Operasi sprinkler dan perubahan pengaturan.</p></div><span class="page-tag"><svg class="icon"><use href="#i-bell"/></svg> 50 aktivitas terakhir</span></section>
       <section data-page="event"><div class="card event-card"><div class="card-head"><div><h3>Aktivitas sprinkler</h3><p class="hint">Catatan perangkat dan pengelola, diurutkan dari yang terbaru.</p></div><button id="btnClearEvents" class="btn red small">Hapus lokal</button></div><ul id="eventList" class="events"><li class="hint">Belum ada event.</li></ul></div></section>
-      <section class="page-heading" data-page="admin" hidden><div><h1>Dashboard Admin</h1><p>Kelola akun dan akses Kandang A.</p></div></section>
+      <section class="page-heading admin-heading" data-page="admin" hidden><div><h1>Dashboard Admin</h1><p>Kelola tim dan tentukan akses sesuai kebutuhan.</p></div><span class="page-tag"><svg class="icon" aria-hidden="true"><use href="#i-barn"/></svg>Kandang A</span></section>
+      <section id="adminStatus" class="admin-feedback" data-page="admin" role="status" aria-live="polite" hidden></section>
       <section class="admin-grid" data-page="admin" hidden>
-        <article class="card"><div class="card-head"><div><h3>Buat akun User</h3><p class="hint">User hanya mendapat izin yang dipilih.</p></div></div>
+        <article class="card admin-create" aria-labelledby="createUserTitle"><div class="admin-panel-head"><span class="admin-panel-icon"><svg class="icon" aria-hidden="true"><use href="#i-user-add"/></svg></span><div><h3 id="createUserTitle">Buat akun User</h3><p class="hint">Undang anggota baru ke kandang.</p></div></div>
           <form id="createUserForm" class="admin-form">
-            <label>Nama<input id="newUserName" type="text" maxlength="80" autocomplete="off"/></label>
-            <label>Email<input id="newUserEmail" type="email" maxlength="254" autocomplete="off" required/></label>
-            <label>Password awal<input id="newUserPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password" required/></label>
-            <p class="hint">Minimal 8 karakter. Sampaikan secara privat; User bisa menggantinya lewat email reset.</p>
+            <div class="admin-identity-fields">
+              <label for="newUserName">Nama <span class="field-optional">Opsional</span></label><input id="newUserName" type="text" maxlength="80" autocomplete="off" placeholder="Nama anggota"/>
+              <label for="newUserEmail">Email</label><input id="newUserEmail" type="email" maxlength="254" autocomplete="off" placeholder="nama@email.com" required/>
+              <label for="newUserPassword">Password awal</label><input id="newUserPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password" placeholder="Minimal 8 karakter" aria-describedby="newPasswordHint" required/>
+              <p id="newPasswordHint" class="hint">Sampaikan secara privat. User dapat menggantinya lewat email reset.</p>
+            </div>
             <fieldset class="permission-options"><legend>Izin Kandang A</legend>
-              <label><input id="newMonitor" type="checkbox" checked/> Monitoring <span>Suhu, kelembapan, THI, dan riwayat</span></label>
-              <label><input id="newSettings" type="checkbox"/> Pengaturan <span>Ambang, jadwal, dan proteksi</span></label>
-              <label><input id="newOperate" type="checkbox"/> Operasi sprinkler <span>Ubah mode dan nyalakan/matikan manual</span></label>
+              <label class="permission-choice"><input id="newMonitor" type="checkbox" aria-label="Monitoring" checked/><span class="permission-copy"><b>Monitoring</b><span>Suhu, kelembapan, THI &amp; riwayat</span></span></label>
+              <label class="permission-choice"><input id="newSettings" type="checkbox" aria-label="Pengaturan"/><span class="permission-copy"><b>Pengaturan</b><span>Ambang, jadwal &amp; proteksi</span></span></label>
+              <label class="permission-choice"><input id="newOperate" type="checkbox" aria-label="Operasi sprinkler"/><span class="permission-copy"><b>Operasi sprinkler</b><span>Mode &amp; kendali manual</span></span></label>
             </fieldset>
-            <p class="hint">Pengaturan atau Operasi otomatis menyertakan Monitoring. Semua izin tidak memberi hak Admin.</p>
-            <button id="btnCreateUser" class="btn blue" type="submit">Buat akun</button>
+            <p class="admin-permission-note">Pengaturan dan Operasi menyertakan Monitoring. User tetap bukan Admin, meski semua izin dipilih.</p>
+            <div class="admin-create-footer"><button id="btnCreateUser" class="btn blue" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-user-add"/></svg>Buat akun</button><span>Hanya izin yang dipilih akan diberikan.</span></div>
           </form>
         </article>
-        <article class="card"><div class="card-head"><div><h3>Akun &amp; izin</h3><p class="hint">Simpan untuk menerapkan perubahan. Nonaktifkan untuk mencabut seluruh akses kandang.</p></div></div><div id="adminStatus" class="settings-status" role="status" aria-live="polite"></div><div id="userList" class="user-list"></div></article>
+        <article class="admin-directory" aria-labelledby="userListTitle"><div class="admin-directory-head"><div><h3 id="userListTitle">Akun &amp; izin</h3><p class="hint">Atur akses setiap anggota, lalu simpan perubahan.</p></div><span id="userCount" class="admin-count">— akun</span></div><div id="userList" class="user-list"></div><p class="admin-directory-note"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Menonaktifkan akses akan mencabut seluruh izin kandang setelah disimpan.</p></article>
       </section>
     </main>
 
@@ -227,6 +231,6 @@ window.addEventListener('error', function (e) {
 </script>
 <script type="module" src="js/firebase.js?v=42"></script>
 <script src="js/app.js?v=42"></script>
-<script src="js/admin.js?v=42"></script>
+<script src="js/admin.js?v=43"></script>
 </body>
 </html>

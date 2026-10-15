@@ -8,21 +8,42 @@
     error?.code==='auth/weak-password'?'Password terlalu lemah. Gunakan minimal 8 karakter.':error?.code==='auth/invalid-email'?'Alamat email tidak valid.':
     error?.code==='PERMISSION_DENIED'?'Izin Admin sudah tidak tersedia.':error?.message||'Tindakan gagal. Periksa koneksi lalu coba lagi.';
   function node(tag,text,className){const n=document.createElement(tag);if(text)n.textContent=text;if(className)n.className=className;return n;}
-  function checkbox(label,checked){const wrap=node('label'),input=node('input');input.type='checkbox';input.checked=checked;wrap.append(input,document.createTextNode(label));return {wrap,input};}
+  function checkbox(label,checked,description){
+    const wrap=node('label',null,description?'permission-choice':'access-toggle'),input=node('input');
+    input.type='checkbox';input.checked=checked;input.setAttribute('aria-label',label);
+    if(description){
+      const copy=node('span',null,'permission-copy');
+      copy.append(node('b',label),node('span',description));wrap.append(input,copy);
+    }else{wrap.append(input,node('span',label));}
+    return {wrap,input};
+  }
+  function initials(user){
+    const name=String(user.name||user.email||'?').trim().split('@')[0];
+    const words=name.split(/\s+/).filter(Boolean);
+    return (words.length>1?words[0][0]+words[words.length-1][0]:name.slice(0,2)).toLocaleUpperCase('id');
+  }
   function render(users){
     const list=el('userList');list.replaceChildren();
+    el('userCount').textContent=`${users.length} akun`;
     users.sort((a,b)=>(a.role==='admin'?-1:1)-(b.role==='admin'?-1:1)||String(a.email).localeCompare(String(b.email)));
     for(const user of users){
-      const row=node('section',null,'user-row'),heading=node('div',null,'user-heading');
-      heading.append(node('b',user.name||user.email),node('span',user.email,'hint'));row.append(heading);
-      if(user.role==='admin'){row.append(node('p','Admin · seluruh izin Kandang A','hint'));list.append(row);continue;}
+      const isAdmin=user.role==='admin',row=node('section',null,'user-row'),heading=node('div',null,'user-heading');
+      row.setAttribute('aria-label',`Akun ${user.name||user.email}`);
+      const avatar=node('span',initials(user),'user-avatar');avatar.setAttribute('aria-hidden','true');
+      const identity=node('div',null,'user-identity'),title=node('div',null,'user-name');
+      title.append(node('b',user.name||user.email),node('span',isAdmin?'Admin':'User','user-role'));
+      identity.append(title,node('span',user.email,'user-email'));
+      const state=node('span',user.enabled===true?'Aktif':'Nonaktif','user-state'+(user.enabled===true?' is-active':''));
+      heading.append(avatar,identity,state);row.append(heading);
+      if(isAdmin){row.classList.add('user-row-admin');row.append(node('p','Seluruh izin Kandang A. Akun Admin tidak dapat diubah di sini.','admin-owner-note'));list.append(row);continue;}
       const a=SCSAccess.normalize({...user,enabled:true}),options=node('fieldset',null,'permission-options');options.append(node('legend','Izin Kandang A'));
       const inputs={};
-      for(const [key,label] of [['monitor','Monitoring'],['settings','Pengaturan'],['operate','Operasi sprinkler']]){
-        const choice=checkbox(label,a.permissions[key]);inputs[key]=choice.input;options.append(choice.wrap);
+      for(const [key,label,description] of [['monitor','Monitoring','Sensor & riwayat'],['settings','Pengaturan','Ambang & jadwal'],['operate','Operasi sprinkler','Mode & manual']]){
+        const choice=checkbox(label,a.permissions[key],description);inputs[key]=choice.input;options.append(choice.wrap);
         choice.input.onchange=()=>{if(key!=='monitor'&&choice.input.checked)inputs.monitor.checked=true;if(key==='monitor'&&!choice.input.checked){inputs.settings.checked=false;inputs.operate.checked=false;}};
       }
       const active=checkbox('Akses aktif',user.enabled===true),actions=node('div',null,'user-actions');
+      const buttons=node('div',null,'user-action-buttons');
       const save=node('button','Simpan izin','btn blue small'),reset=node('button','Kirim email reset','btn small');save.type=reset.type='button';
       save.onclick=async()=>{
         if(!allowed()||busy)return;busy=true;save.disabled=true;
@@ -30,15 +51,15 @@
         catch(error){status(message(error));}finally{busy=false;if(save.isConnected)save.disabled=false;}
       };
       reset.onclick=async()=>{if(!allowed()||busy)return;busy=true;reset.disabled=true;try{await SCSFirebase.resetPassword(user.email);status('Email reset password dikirim. Periksa juga folder spam.');}catch(error){status(message(error));}finally{busy=false;if(reset.isConnected)reset.disabled=false;}};
-      actions.append(active.wrap,save,reset);row.append(options,actions);list.append(row);
+      buttons.append(reset,save);actions.append(active.wrap,buttons);row.append(options,actions);list.append(row);
     }
-    if(!users.length)list.append(node('p','Belum ada akun.','hint'));
+    if(!users.length)list.append(node('p','Belum ada akun untuk ditampilkan.','admin-empty'));
   }
   window.SCSAdmin={sync(){
-    const current=++epoch;stop?.();stop=null;el('userList').replaceChildren();el('newUserPassword').value='';status('');
+    const current=++epoch;stop?.();stop=null;el('userList').replaceChildren();el('userCount').textContent='— akun';el('newUserPassword').value='';status('');
     if(!allowed())return;
     status('Memuat akun…');
-    try{stop=SCSFirebase.subscribeUsers(users=>{if(current!==epoch||!allowed())return;render(users);status('');},()=>{if(current===epoch){el('userList').replaceChildren();status('Daftar akun tidak dapat dimuat. Periksa koneksi.');}});}
+    try{stop=SCSFirebase.subscribeUsers(users=>{if(current!==epoch||!allowed())return;render(users);status('');},()=>{if(current===epoch){el('userList').replaceChildren();el('userCount').textContent='— akun';status('Daftar akun tidak dapat dimuat. Periksa koneksi.');}});}
     catch(error){status(message(error));}
   }};
   const newInputs=['newMonitor','newSettings','newOperate'].map(el);

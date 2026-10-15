@@ -93,8 +93,30 @@ test('Barn Console keeps depth selective, snapshot labels explicit and release a
   assert.doesNotMatch(hero,/SISTEM \/ 01|ESP32|relay|Lihat titik sensor|hero-kicker/);
   assert.doesNotMatch(hero, /id="heroHealth"|data-sensors=/);
   for (const url of [...html.matchAll(/(?:src|href)="((?:js|css)\/[^\"]+)"/g)].map(m => m[1])) {
-    assert.match(url, /\?v=42$/);
+    const version = url.startsWith('css/') || url.startsWith('js/admin.js') ? 43 : 42;
+    assert.ok(url.endsWith(`?v=${version}`), `unexpected asset version: ${url}`);
   }
+});
+
+test('Admin has a separate directory, labelled account fields and accessible permission cards', () => {
+  assert.match(html, /class="page-heading admin-heading" data-page="admin" hidden/);
+  assert.match(html, /id="adminStatus"[^>]*data-page="admin"[^>]*role="status"/);
+  assert.match(html, /class="card admin-create" aria-labelledby="createUserTitle"/);
+  assert.match(html, /class="admin-directory" aria-labelledby="userListTitle"/);
+  for (const id of ['newUserName', 'newUserEmail', 'newUserPassword']) {
+    assert.match(html, new RegExp(`<label for="${id}">`));
+  }
+  assert.match(html, /id="newUserPassword"[^>]*aria-describedby="newPasswordHint"/);
+  assert.equal((html.match(/class="permission-choice"/g) || []).length, 3);
+  for (const name of ['Monitoring', 'Pengaturan', 'Operasi sprinkler']) {
+    assert.ok(html.includes(`aria-label="${name}"`));
+  }
+  assert.match(html, /id="userCount"/);
+  const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
+  assert.match(css, /container: admin-directory \/ inline-size/);
+  assert.match(css, /@container admin-directory \(min-width: 580px\)/);
+  assert.match(css, /\.permission-choice input:checked::before/);
+  assert.match(css, /\.permission-choice input, \.access-toggle input \{ appearance: auto/);
 });
 
 test('configuration precedes a full-width chart with three labelled responsive control groups', () => {
