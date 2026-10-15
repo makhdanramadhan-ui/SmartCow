@@ -10,7 +10,7 @@
   <script>
   try { document.documentElement.dataset.theme = localStorage.getItem('scs_theme') === 'dark' ? 'dark' : 'light'; } catch {}
   </script>
-  <link rel="stylesheet" href="css/style.css?v=41" />
+  <link rel="stylesheet" href="css/style.css?v=42" />
 </head>
 <body>
 <!-- Local icon set: no remote font or icon library required. -->
@@ -45,11 +45,11 @@
     <div class="auth-story-copy">
       <span class="story-kicker"><span></span> MONITORING &amp; KONTROL KANDANG</span>
       <h1>Pantau kandang.<br/><em>Atur sprinkler.</em></h1>
-      <p>Suhu, kelembapan, dan THI agregat dari dua node ESP32. Status perangkat dan kendali sprinkler dalam satu panel.</p>
+      <p>Pantau suhu, kelembapan, dan THI kandang. Kelola sprinkler sesuai izin akun Anda.</p>
     </div>
     <div class="auth-scene">
-      <img src="assets/farm-scene.svg?v=41" alt="Ilustrasi kandang dengan atap jingga, sapi, dan dua node sensor" width="760" height="470" fetchpriority="high" />
-      <div class="scene-caption"><span class="scene-caption-icon"><svg class="icon"><use href="#i-signal"/></svg></span><div><b>Dua node. Satu sistem.</b><span>6 DS18B20 &nbsp; / &nbsp; 4 DHT22 &nbsp; / &nbsp; 1 relay</span></div></div>
+      <img src="assets/farm-scene.svg?v=42" alt="Ilustrasi kandang dengan atap jingga dan sapi" width="760" height="470" fetchpriority="high" />
+      <div class="scene-caption"><span class="scene-caption-icon"><svg class="icon"><use href="#i-barn"/></svg></span><div><b>Kandang A</b><span>Monitoring dan sprinkler</span></div></div>
     </div>
     <div class="auth-story-footer"><span>SMARTCOW / IoT</span><span>Akses pengelola kandang</span></div>
   </section>
@@ -81,15 +81,14 @@
   <div id="sideOverlay" class="side-overlay" hidden></div>
   <aside id="sidebar" class="sidebar" aria-label="Navigasi utama" aria-hidden="true" inert>
     <div class="side-head"><a class="wordmark" href="./"><span class="brand-mark"><svg class="icon"><use href="#i-barn"/></svg></span><span>smartcow<span class="brand-period">.</span></span></a><button id="sideClose" class="icon-button" aria-label="Tutup menu"><svg class="icon"><use href="#i-close"/></svg></button></div>
-    <div class="farm-selector"><span class="farm-avatar"><svg class="icon"><use href="#i-barn"/></svg></span><div><b>Kandang utama</b><span>cow-sprinkler-01</span></div></div>
     <div class="nav-label">RUANG KENDALI</div>
     <nav class="side-nav">
       <button class="side-link active" data-page="dash"><svg class="icon"><use href="#i-grid"/></svg> Overview <span class="nav-indicator"></span></button>
       <button class="side-link" data-page="log"><svg class="icon"><use href="#i-history"/></svg> Riwayat sensor</button>
       <button class="side-link" data-page="event"><svg class="icon"><use href="#i-bell"/></svg> Aktivitas sprinkler</button>
+      <button id="adminNav" class="side-link" data-page="admin" hidden><svg class="icon"><use href="#i-settings"/></svg> Dashboard Admin</button>
     </nav>
     <div class="sidebar-bottom">
-      <div class="sidebar-note"><svg class="icon"><use href="#i-signal"/></svg><b>Perangkat sistem</b><p>ESP kanan · sensor &amp; relay<br/>ESP kiri · sensor</p><span>6 DS18B20 · 4 DHT22</span></div>
       <div class="sidebar-account"><span class="account-avatar" id="accountAvatar">P</span><div><b id="accountName">Pengelola</b><span id="accountEmail">Akun terautentikasi</span></div></div>
       <button id="btnLogout" class="logout-btn" hidden><svg class="icon"><use href="#i-logout"/></svg> Keluar dari akun</button>
     </div>
@@ -98,23 +97,23 @@
   <div class="workspace">
     <header class="topbar">
       <div class="topbar-left"><button id="menuBtn" class="icon-button menu-btn" aria-label="Buka navigasi" aria-controls="sidebar" aria-expanded="false"><svg class="icon"><use href="#i-menu"/></svg></button><div class="breadcrumb">Ruang kendali <span>/</span> <b id="pageBreadcrumb">Overview</b></div></div>
-      <div class="top-right"><span id="connBadge" class="badge sim">● MENGHUBUNGKAN…</span><span class="topbar-divider"></span><button id="themeBtn" class="theme-btn icon-button" aria-label="Ganti tema" title="Ganti tema">☾</button><span class="topbar-avatar" aria-label="Akun pengelola">P</span></div>
+      <div class="top-right"><span id="connBadge" class="badge sim">● MENGHUBUNGKAN…</span><span class="topbar-divider"></span><button id="themeBtn" class="theme-btn icon-button" aria-label="Ganti tema" title="Ganti tema">☾</button><div class="profile-wrap"><button id="profileBtn" class="topbar-avatar" type="button" aria-label="Buka profil" aria-expanded="false" aria-controls="profileMenu">P</button><div id="profileMenu" class="profile-menu" hidden><b id="profileEmail"></b><span id="profileRole" class="hint"></span><button id="profileAdmin" class="btn" type="button" hidden>Dashboard Admin</button><button id="profileLogout" class="btn" type="button">Keluar</button></div></div></div>
     </header>
 
     <main id="mainContent" class="container" tabindex="-1">
       <div id="localPreviewNotice" class="local-preview-note" role="note" hidden><svg class="icon"><use href="#i-lock"/></svg><span><b>Preview lokal.</b> Ini server lokal. Tombol kontrol tetap terhubung ke perangkat asli.</span></div>
       <div id="connectionNotice" class="notice" role="status" hidden></div>
-      <section class="page-heading" data-page="dash"><div><div class="eyebrow">PANEL KANDANG</div><h1>Halo, <span id="greetingName">Pengelola</span>.</h1><p>Pembacaan sensor dan kendali sprinkler.</p></div><div class="clock-card"><div><svg class="icon"><use href="#i-history"/></svg><span id="clock" class="clock">--:--:--</span><span class="wib-badge">WIB</span></div><div id="dateLine" class="date-line">Memuat waktu…</div></div></section>
+      <section class="page-heading" data-page="dash"><div><h1>Halo, <span id="greetingName">Pengelola</span>.</h1></div><div class="clock-card"><div><svg class="icon"><use href="#i-history"/></svg><span id="clock" class="clock">--:--:--</span><span class="wib-badge">WIB</span></div><div id="dateLine" class="date-line">Memuat waktu…</div></div></section>
+      <section id="accessNotice" class="notice" data-page="dash" hidden>Memeriksa izin akun…</section>
 
       <section class="farm-hero" data-page="dash">
-        <div class="hero-art"><img src="assets/farm-scene.svg?v=41" alt="" width="760" height="470"/></div>
-        <div class="hero-copy"><div class="hero-kicker">SISTEM / 01</div><h2>Kandang utama</h2><p>2 ESP32 <span>/</span> 6 suhu <span>/</span> 4 kelembapan <span>/</span> 1 relay</p><span id="heroHealth" class="hero-health">Menunggu pembacaan sensor</span></div>
-        <button class="hero-link" type="button" data-sensors="temperature" aria-haspopup="dialog" aria-controls="sensorDialog">Lihat titik sensor <svg class="icon"><use href="#i-arrow"/></svg></button>
+        <div class="hero-art"><img src="assets/farm-scene.svg?v=42" alt="" width="760" height="470"/></div>
+        <div class="hero-copy"><h2>Kandang A</h2></div>
       </section>
 
       <section class="grid command-grid" data-page="dash" aria-label="Status dan mode sprinkler">
-        <article class="card sprinkler-card"><div class="section-heading-row"><div class="panel-title"><span class="metric-icon sage"><svg class="icon"><use href="#i-drop"/></svg></span><div><h3>Sprinkler kandang</h3><p class="hint">Status relay aktual · ESP kanan</p></div></div><span class="subtle-tag">GPIO 23</span></div><div class="sprinkler-status-row"><div id="sprinklerState" class="sprinkler unknown"><span class="dot"></span><span id="sprinklerText">BELUM DIKETAHUI</span></div><div id="sprinklerTimer" class="timer"></div></div><div id="sprinklerReason" class="reason">Menunggu data sensor…</div><div id="modeInfo" class="mode-info"></div></article>
-        <article class="card mode-card"><div class="section-heading-row"><div><h3>Mode operasi</h3><p class="hint">Pilih cara mengelola sprinkler</p></div><svg class="icon muted-icon"><use href="#i-settings"/></svg></div><div class="mode-switch"><button id="btnAuto" class="mode-btn active">Otomatis</button><button id="btnManual" class="mode-btn">Manual</button></div><div class="manual-controls"><button id="btnSprayOn" class="btn green" disabled>Nyalakan manual</button><button id="btnSprayOff" class="btn red" disabled>Matikan manual</button></div><p class="hint mode-footnote">Manual ON bertahan sampai perintah OFF. Kontrol otomatis dijalankan ESP, bukan browser.</p></article>
+        <article class="card sprinkler-card"><div class="section-heading-row"><div class="panel-title"><span class="metric-icon sage"><svg class="icon"><use href="#i-drop"/></svg></span><div><h3>Sprinkler kandang</h3></div></div></div><div class="sprinkler-status-row"><div id="sprinklerState" class="sprinkler unknown"><span class="dot"></span><span id="sprinklerText">BELUM DIKETAHUI</span></div><div id="sprinklerTimer" class="timer"></div></div><div id="sprinklerReason" class="reason">Menunggu data sensor…</div><div id="modeInfo" class="mode-info"></div></article>
+        <article class="card mode-card" data-permission="operate"><div class="section-heading-row"><div><h3>Mode operasi</h3><p class="hint">Pilih cara mengelola sprinkler</p></div><svg class="icon muted-icon"><use href="#i-settings"/></svg></div><div class="mode-switch"><button id="btnAuto" class="mode-btn active">Otomatis</button><button id="btnManual" class="mode-btn">Manual</button></div><div class="manual-controls"><button id="btnSprayOn" class="btn green" disabled>Nyalakan manual</button><button id="btnSprayOff" class="btn red" disabled>Matikan manual</button></div><p class="hint mode-footnote">Manual menyala sampai dimatikan. Mode otomatis tetap berjalan meskipun halaman ini ditutup.</p></article>
       </section>
 
       <section class="grid summary-grid" data-page="dash" aria-label="Ringkasan iklim kandang">
@@ -124,7 +123,7 @@
       </section>
 
       <section class="grid insights-grid" data-page="dash" aria-label="Konfigurasi sprinkler dan tren sensor">
-        <article class="card control-card" aria-labelledby="controlTitle">
+        <article class="card control-card" aria-labelledby="controlTitle" data-permission="settings">
           <div class="card-head"><div><div class="eyebrow">KONFIGURASI SPRINKLER</div><h3 id="controlTitle">Atur sesuai kebutuhan kandang.</h3><p class="hint">Perubahan berlaku setelah disimpan.</p></div><svg class="icon muted-icon"><use href="#i-settings"/></svg></div>
           <div id="firmwareNotice" class="notice" role="status" hidden>Upload firmware kanan v3.1 terlebih dahulu. Firmware lama belum menjalankan kontrol THI/jadwal bersyarat.</div>
           <div id="settingsStatus" class="settings-status" role="status" aria-live="polite"></div>
@@ -170,6 +169,25 @@
 
       <section class="page-heading" data-page="event"><div><div class="eyebrow">SISTEM / AKTIVITAS</div><h1>Aktivitas sprinkler<span class="heading-period">.</span></h1><p>Operasi sprinkler dan perubahan pengaturan.</p></div><span class="page-tag"><svg class="icon"><use href="#i-bell"/></svg> 50 aktivitas terakhir</span></section>
       <section data-page="event"><div class="card event-card"><div class="card-head"><div><h3>Aktivitas sprinkler</h3><p class="hint">Catatan perangkat dan pengelola, diurutkan dari yang terbaru.</p></div><button id="btnClearEvents" class="btn red small">Hapus lokal</button></div><ul id="eventList" class="events"><li class="hint">Belum ada event.</li></ul></div></section>
+      <section class="page-heading" data-page="admin" hidden><div><h1>Dashboard Admin</h1><p>Kelola akun dan akses Kandang A.</p></div></section>
+      <section class="admin-grid" data-page="admin" hidden>
+        <article class="card"><div class="card-head"><div><h3>Buat akun User</h3><p class="hint">User hanya mendapat izin yang dipilih.</p></div></div>
+          <form id="createUserForm" class="admin-form">
+            <label>Nama<input id="newUserName" type="text" maxlength="80" autocomplete="off"/></label>
+            <label>Email<input id="newUserEmail" type="email" maxlength="254" autocomplete="off" required/></label>
+            <label>Password awal<input id="newUserPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password" required/></label>
+            <p class="hint">Minimal 8 karakter. Sampaikan secara privat; User bisa menggantinya lewat email reset.</p>
+            <fieldset class="permission-options"><legend>Izin Kandang A</legend>
+              <label><input id="newMonitor" type="checkbox" checked/> Monitoring <span>Suhu, kelembapan, THI, dan riwayat</span></label>
+              <label><input id="newSettings" type="checkbox"/> Pengaturan <span>Ambang, jadwal, dan proteksi</span></label>
+              <label><input id="newOperate" type="checkbox"/> Operasi sprinkler <span>Ubah mode dan nyalakan/matikan manual</span></label>
+            </fieldset>
+            <p class="hint">Pengaturan atau Operasi otomatis menyertakan Monitoring. Semua izin tidak memberi hak Admin.</p>
+            <button id="btnCreateUser" class="btn blue" type="submit">Buat akun</button>
+          </form>
+        </article>
+        <article class="card"><div class="card-head"><div><h3>Akun &amp; izin</h3><p class="hint">Simpan untuk menerapkan perubahan. Nonaktifkan untuk mencabut seluruh akses kandang.</p></div></div><div id="adminStatus" class="settings-status" role="status" aria-live="polite"></div><div id="userList" class="user-list"></div></article>
+      </section>
     </main>
 
     <footer class="app-footer"><span><svg class="icon"><use href="#i-barn"/></svg> smartcow. <span>Teknologi untuk kandang.</span></span><div class="node-pills"><span id="rightNode" class="node-pill">ESP kanan · menunggu</span><span id="leftNode" class="node-pill">ESP kiri · menunggu</span></div></footer>
@@ -189,11 +207,12 @@
   <div id="confirmOverlay" class="confirm-overlay" hidden><div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMsg"><div class="confirm-icon"><svg class="icon"><use href="#i-history"/></svg></div><div id="confirmTitle">Yakin?</div><div id="confirmMsg" class="hint"></div><div class="confirm-actions"><button id="confirmNo" class="btn">Batal</button><button id="confirmYes" class="btn red">Ya, hapus</button></div></div></div>
 </div>
 
-<script src="js/core.js?v=41"></script>
-<script src="js/control.js?v=41"></script>
-<script src="js/telemetry.js?v=41"></script>
-<script src="js/config.js?v=41"></script>
-<script src="js/firebase-public.js?v=41"></script>
+<script src="js/core.js?v=42"></script>
+<script src="js/access.js?v=42"></script>
+<script src="js/control.js?v=42"></script>
+<script src="js/telemetry.js?v=42"></script>
+<script src="js/config.js?v=42"></script>
+<script src="js/firebase-public.js?v=42"></script>
 <script>
 window.addEventListener('error', function (e) {
   if (!window.SCSFirebase && ((e.message && e.message !== 'Script error.') || e.target?.tagName === 'SCRIPT')) {
@@ -206,7 +225,8 @@ window.addEventListener('error', function (e) {
   }
 }, true);
 </script>
-<script type="module" src="js/firebase.js?v=41"></script>
-<script src="js/app.js?v=41"></script>
+<script type="module" src="js/firebase.js?v=42"></script>
+<script src="js/app.js?v=42"></script>
+<script src="js/admin.js?v=42"></script>
 </body>
 </html>

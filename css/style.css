@@ -163,6 +163,25 @@ button, a, input, select { touch-action: manipulation; }
 .sidebar-note > span { font-size: 12px; color: #c7d3e3; display: block; line-height: 1.6; }
 .sidebar-account { display: flex; align-items: center; gap: 10px; padding: 22px 3px 16px; }
 .account-avatar, .topbar-avatar { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; flex: none; font-weight: 650; font-size: 15px; background: #dbe6f8; color: #2059ac; }
+.topbar-avatar { border: 1px solid var(--line); cursor: pointer; }
+.profile-wrap { position: relative; }
+.profile-menu { position: absolute; right: 0; top: calc(100% + 12px); width: min(290px, calc(100vw - 32px)); padding: 18px; display: grid; gap: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); box-shadow: var(--shadow); z-index: 60; overflow-wrap: anywhere; }
+.admin-grid { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(0, 1.4fr); gap: 28px; align-items: start; }
+.admin-form { display: grid; gap: 16px; }
+.admin-form > label { display: grid; gap: 8px; font-size: 14px; }
+.admin-form input:not([type="checkbox"]) { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--inset); background: var(--card); color: var(--txt); padding: 12px 14px; font: inherit; }
+.permission-options { display: grid; gap: 14px; border: 0; padding: 0; margin: 4px 0; min-width: 0; }
+.permission-options legend { font-size: 14px; font-weight: 650; margin-bottom: 14px; }
+.permission-options label { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 10px; row-gap: 4px; align-items: center; font-size: 14px; }
+.permission-options label span { grid-column: 2; font-size: 13px; color: var(--muted); }
+.permission-options input, .user-actions input { accent-color: var(--blue); width: 18px; height: 18px; }
+.user-list { display: grid; gap: 22px; }
+.user-row { min-width: 0; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.user-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.user-heading { display: grid; gap: 4px; margin-bottom: 16px; overflow-wrap: anywhere; }
+.user-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 18px; }
+.user-actions > label { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-right: auto; }
+@media(max-width: 980px) { .admin-grid { grid-template-columns: minmax(0, 1fr); } }
 .sidebar-account div { min-width: 0; }
 .sidebar-account b { display: block; font-weight: 650; font-size: 15px; overflow-wrap: anywhere; }
 .sidebar-account div > span { display: block; color: #b4c1d3; font-size: 12px; margin-top: 5px; overflow-wrap: anywhere; }
@@ -206,7 +225,7 @@ button, a, input, select { touch-action: manipulation; }
 .clock { font-size: 26px; letter-spacing: .4px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .wib-badge { font-size: 12px; color: var(--muted); padding: 2px 4px; }
 .date-line { color: var(--muted); font-size: 13px; margin-top: 7px; }
-.farm-hero { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; align-items: center; gap: 24px; padding: 16px 24px 16px 16px; min-height: 146px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--card); box-shadow: var(--inset); }
+.farm-hero { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 24px; padding: 16px 24px 16px 16px; min-height: 146px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--card); box-shadow: var(--inset); }
 .hero-copy { min-width: 0; }
 .hero-kicker { color: var(--warm); font-size: 12px; font-weight: 700; letter-spacing: 1.6px; line-height: 1.5; }
 .hero-copy h2 { font-size: 24px; letter-spacing: -.5px; font-weight: 700; line-height: 1.3; margin: 4px 0 6px; }
@@ -496,7 +515,7 @@ td.cold { color: var(--positive-txt); }
   .container { padding: 28px 25px; gap: 26px; }
   .topbar { padding: 0 25px; }
   .page-heading h1 { font-size: 28px; }
-  .farm-hero { grid-template-columns: 120px minmax(0, 1fr) auto; gap: 18px; }
+  .farm-hero { grid-template-columns: 120px minmax(0, 1fr); gap: 18px; }
   .metric-card { padding: 20px; }
   .metric-heading { gap: 8px; }
   .metric-icon { width: 33px; height: 33px; border-radius: 10px; }
@@ -552,7 +571,7 @@ td.cold { color: var(--positive-txt); }
   .breadcrumb { font-size: 13px; }
   .breadcrumb span { margin: 0 8px; }
   .top-right { gap: 8px; }
-  .topbar-avatar { display: none; }
+  .topbar-avatar { display: grid; }
   .topbar-divider { display: none; }
   .page-heading { align-items: flex-start; flex-direction: column; }
   .page-heading h1 { font-size: 28px; }

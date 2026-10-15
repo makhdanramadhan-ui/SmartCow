@@ -1,6 +1,8 @@
 # SmartCow — Barn Console & preview lokal
 
-UI terbaru **Barn Console (v41)**: neumorphism dengan permukaan abu kebiruan yang timbul, area pembacaan/input cekung, navigasi arang, dan aksen fungsional **jingga / suhu**, **biru / kelembapan**, **hijau / THI**. Panel relay dibuat kontras; ringkasan sistem menggantikan banner promosi besar. Label serta keterangan tidak lagi dibungkus kotak bertumpuk. Tersedia tema terang/gelap, drawer ponsel, riwayat sensor, aktivitas sprinkler, dan ilustrasi skema kandang orisinal (SVG lokal, bukan posisi sensor sebenarnya).
+UI terbaru **Barn Console (v42)**: neumorphism dengan permukaan abu kebiruan yang timbul, area pembacaan/input cekung, navigasi arang, dan aksen fungsional **jingga / suhu**, **biru / kelembapan**, **hijau / THI**. Panel sprinkler dibuat kontras; banner cukup **Kandang A** dan sapaan cukup **Halo, Akhdan.** (nama mengikuti email dengan huruf awal kapital). Label GPIO, inventaris perangkat di banner, Sistem/01, tautan sensor di banner, selector kandang/perangkat di sidebar, serta blok perangkat sidebar dihapus. Jam, detail sensor dari kartu, tema terang/gelap, drawer, dan ilustrasi skema kandang tetap tersedia.
+
+v42 menambahkan **Dashboard Admin** melalui avatar kanan atas maupun sidebar. Admin pertama yang disetujui **akhdan@gmail.com** dapat membuat User, memilih izin Monitoring/Pengaturan/Operasi sprinkler, menonaktifkan akses dan mengirim email reset. Izin ditegakkan oleh Firebase Rules, bukan hanya tombol tersembunyi. Pemulihan sesi menunggu record izin; akun lama lain tidak otomatis mendapat akses. Lihat [ADMIN-USER.md](ADMIN-USER.md) untuk penggunaan, batasan, emulator, bootstrap, dan penegakan keamanan.
 
 Layout v41: **Konfigurasi sprinkler di atas, Tren sensor di bawah**, keduanya memakai satu kolom selebar konten dengan tepi kiri/kanan sejajar. Kartu dibuat persegi panjang dengan sudut 14 px, tanpa memaksa tinggi yang sama atau memotong isi. Tiga kelompok konfigurasi tersusun horizontal jika lebar isi panel ≥1000 px. Pada ≥680 px, dua kelompok pilihan berdampingan dan empat input ambang/proteksi sejajar di baris berikutnya; panel lebih sempit mengalir ke bawah. Container query mengikuti lebar panel sebenarnya saat sidebar dibuka, bukan hanya viewport. Jadwal dibuat dua kolom pada panel lebar, satu kolom pada panel kecil. Peringatan/status dan daftar jadwal berada di bawah header/kelompok kontrol dengan lebar penuh; tombol Simpan berada di footer panel. Urutan DOM/Tab mengikuti urutan visual dan tidak mengubah perilaku pengaturan.
 
@@ -44,7 +46,7 @@ Gunakan akun Firebase Authentication yang biasa dipakai. Koneksi internet diperl
 
 ## Cakupan revisi
 
-Perubahan hanya pada UI web, preview lokal, dan allowlist aset untuk ilustrasi. Firmware, kredensial lokal, THI 6 DS + 4 RH, profil Suhu/THI, jadwal bersyarat, serta kebijakan relay tidak diubah.
+v36–v41 membatasi perubahan pada UI/preview/allowlist aset. v42 juga mengubah bridge Firebase serta Rules untuk role/izin, tanpa mengganti firmware, kredensial lokal, rumus THI 6 DS + 4 RH, profil Suhu/THI, jadwal bersyarat, atau kebijakan relay. Simpan pengaturan kini tidak menyertakan mode/manual output, sehingga izin Pengaturan tidak mendapat izin Operasi secara tidak sengaja.
 
 UI v36 disetujui untuk publikasi pada 13 Oktober 2026. Target Hosting: **https://smartcow-de25f.web.app**; repo: **https://github.com/makhdanramadhan-ui/SmartCow**. Publikasi menggunakan `firebase deploy --only hosting --project smartcow-de25f`, bukan deployment database rules.
 
@@ -58,12 +60,14 @@ Revisi v40 (Barn Console / neumorphism) disetujui untuk langsung push dan deploy
 
 Revisi v41 (konfigurasi horizontal, grafik di bawah dengan lebar sama) mengikuti persetujuan langsung push/deploy. Arsip v40: `smartcow-v40-sebelum-layout-horizontal-20261015-201523.zip`. Perubahan hanya HTML/CSS, dokumentasi, dan tes layout; seluruh JavaScript dan firmware tetap identik dengan v40. QA: 70 tes otomatis, 54 kondisi layout 320–1920 px/sidebar/tema, enam jadwal, picker tanggal/jam, peringatan firmware lama, draft/save/gagal/retry, navigasi/fokus, autentikasi/motion, THI, dan ambang terpilih. Pengujian interaktif memakai Firebase mock tanpa menulis kontrol produksi.
 
+Revisi v42 (copy sederhana dan Admin/User) mengikuti permintaan push/deploy. Arsip v41: `smartcow-v41-sebelum-admin-user-20261015-222747.zip`; Rules produksi lama juga dibackup privat. QA: 75 tes otomatis, 160 pemeriksaan emulator Rules/Auth, alur SDK asli terhadap emulator lokal, 18 layout Admin terang/gelap, regresi 54 kondisi konfigurasi/sidebar, dan regresi THI/ambang/motion. Rilis ini menerbitkan Hosting **dan Database Rules** setelah bootstrap UID Admin yang disetujui. Hanya 12 aset runtime yang diterbitkan; docs, tes, rules, dan firmware tidak masuk Hosting.
+
 Backup sebelum revisi final/publikasi tersedia lokal di `F:\apaelah\TUGAS\smt5\IoT\web projek IoT_Backup\smartcow-sebelum-deploy-20261013-121706`: snapshot lengkap proyek dan arsip commit lama `dcf8657`. Snapshot lokal mengandung kredensial privat; jangan unggah folder backup.
 
 ## Tes lokal
 
 ```powershell
-node --test test/core.test.js test/telemetry.test.js test/control.test.js test/preview.test.js test/ui-threshold.test.js
+node --test test/core.test.js test/telemetry.test.js test/control.test.js test/preview.test.js test/ui-threshold.test.js test/access.test.js
 ```
 
 Tes preview memeriksa dashboard tersembunyi sejak HTML, ID elemen, ilustrasi mandiri/versioning, label snapshot, serta server lokal yang menolak akses ke firmware/konfigurasi privat dan request tulis. Tes UI ambang menjalankan fungsi render asli untuk memeriksa dasar tersimpan/draft, nilai pengguna, monitoring netral, data hilang, serta garis grafik. Tes THI dan kebijakan kontrol yang sudah ada tetap dipertahankan. QA browser memakai Firebase mock (tanpa kontrol produksi): 320–1920 px, tema terang/gelap, sidebar, popup sensor, refresh sesi, draft/save/failure/retry, serta pemeriksaan kontras teks utama minimum 4,5:1. Pemeriksaan SDK asli tidak login dan tidak menulis ke RTDB.

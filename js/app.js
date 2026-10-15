@@ -18,6 +18,10 @@ let events = [];
 try { const saved = JSON.parse(localStorage.getItem('scs_events') || '[]'); if (Array.isArray(saved)) events = saved.slice(0,50); } catch {}
 let fbConnected = false;
 let controlLoaded = false;
+let accessState=null;
+let accessRevision=0;
+window.smartcowAccess=null;
+const hasAccess=permission=>SCSAccess.can(accessState,permission);
 let appliedCfg = SCSControl.normalize(CFG), settingsDirty = false, savingSettings = false;
 const basisName = cfg => cfg.controlBasis === 'thi' ? 'THI' : 'Suhu';
 const basisUnit = cfg => cfg.controlBasis === 'thi' ? ' THI' : ' °C';
@@ -168,11 +172,9 @@ function renderSensors(){
   if (!sensorView.thiComplete){ thiPill.textContent='PERLU 6 DS + 4 DHT VALID'; thiPill.className='status-pill neutral'; }
   else if (!thiActive){ thiPill.textContent='MONITORING THI'; thiPill.className='status-pill neutral'; }
   else { thiPill.textContent=sensorView.thi>=thiProfile.threshold ? 'THRESHOLD THI TERCAPAI' : 'DI BAWAH THRESHOLD THI'; thiPill.className='status-pill '+(sensorView.thi>=thiProfile.threshold ? 'waspada' : 'normal'); }
-  for (const [id, name, online] of [['rightNode','ESP kanan',sensorView.online],['leftNode','ESP kiri',sensorView.leftOnline]]){
+  for (const [id, name, online] of [['rightNode','Perangkat utama',sensorView.online],['leftNode','Sensor tambahan',sensorView.leftOnline]]){
     $(id).textContent = `${name} · ${online ? 'online' : 'belum terhubung'}`; $(id).classList.toggle('online', online);
   }
-  $('heroHealth').textContent = sensorView.thiComplete ? '10 input valid · iklim terpantau' : sensorView.online ? `${sensorView.validCount}/6 DS · ${sensorView.humidityValidCount}/4 DHT valid` : 'Menunggu pembacaan sensor terkini';
-  $('heroHealth').classList.toggle('complete', sensorView.thiComplete);
   return avg;
 }
 
@@ -181,34 +183,34 @@ function refreshTelemetry(){
   temps = sensorView.s; humidities = sensorView.h;
   renderSensors(); renderSprinkler();
   setConn(fbConnected ? (!transportConnected ? 'err' : sensorView.online ? 'live' : 'offline') : 'login');
-  $('btnSprayOn').disabled = $('btnSprayOff').disabled = CFG.mode !== 'manual' || !controlLoaded || !fbConnected || !sensorView.online || !transportConnected;
-  $('btnManual').disabled = !fbConnected || !controlLoaded || !transportConnected || !sensorView.online || savingSettings;
+  $('btnSprayOn').disabled = $('btnSprayOff').disabled = !hasAccess('operate') || CFG.mode !== 'manual' || !controlLoaded || !fbConnected || !sensorView.online || !transportConnected;
+  $('btnManual').disabled = !hasAccess('operate') || !fbConnected || !controlLoaded || !transportConnected || !sensorView.online || savingSettings;
   $('btnAuto').disabled = $('btnManual').disabled || !firmwareReady();
   autoControl(sensorView.avg);
   $('firmwareNotice').hidden=firmwareReady();
-  $('btnSaveCfg').disabled = CFG.mode!=='auto' || !fbConnected || !controlLoaded || !transportConnected || !firmwareReady() || savingSettings;
-  $('btnLogNow').disabled = !sensorView.online || !fbConnected;
+  $('btnSaveCfg').disabled = !hasAccess('settings') || CFG.mode!=='auto' || !fbConnected || !controlLoaded || !transportConnected || !firmwareReady() || savingSettings;
+  $('btnLogNow').disabled = !hasAccess('monitor') || !sensorView.online || !fbConnected;
 }
 
 // ---------- SPRINKLER (perintah manual ke ESP32 via Firebase) ----------
 async function setSprinkler(on, reason){
-  if (!fbConnected || !controlLoaded || !sensorView.online || !transportConnected || CFG.mode !== 'manual' || !window.SCSFirebase){ $('sprinklerReason').textContent = 'Perangkat offline atau mode belum siap; perintah tidak dikirim.'; return; }
+  if (!hasAccess('operate') || !fbConnected || !controlLoaded || !sensorView.online || !transportConnected || CFG.mode !== 'manual' || !window.SCSFirebase){ $('sprinklerReason').textContent = 'Izin, koneksi, atau mode belum siap; perintah tidak dikirim.'; return; }
   try { await SCSFirebase.pushOverride(on, reason); }
   catch { $('sprinklerReason').textContent = 'Perintah gagal dikirim.'; return; }
-  $('sprinklerReason').textContent = 'Perintah dikirim, menunggu ESP32 mengeksekusi…';
+  $('sprinklerReason').textContent = 'Perintah dikirim, menunggu perangkat…';
 }
 function renderSprinkler(){
   const box = $('sprinklerState');
   if (sensorView.ssr === null){
     box.className = 'sprinkler unknown'; $('sprinklerText').textContent = 'BELUM DIKETAHUI';
-    $('sprinklerTimer').textContent = 'Menunggu status relay terbaru dari ESP kanan.';
+    $('sprinklerTimer').textContent = 'Menunggu status sprinkler terbaru.';
     return;
   }
   box.className = 'sprinkler ' + (sprinklerOn ? 'on' : 'off');
   $('sprinklerText').textContent = sprinklerOn ? 'MENYEMPROT 💦' : 'MATI';
   if (sprinklerOn && sprayStart){
     const el = Math.floor((Date.now()-sprayStart)/1000);
-    $('sprinklerTimer').textContent = appliedCfg.mode === 'manual' ? 'Manual ON · tetap nyala sampai perintah OFF.' : `Terpantau nyala ${el} dtk · ${basisName(appliedCfg)}, hysteresis/durasi/cooldown di ESP.`;
+    $('sprinklerTimer').textContent = appliedCfg.mode === 'manual' ? 'Manual · menyala sampai dimatikan.' : `Terpantau menyala ${el} detik.`;
   } else {
     $('sprinklerTimer').textContent = appliedCfg.mode==='manual' ? 'Mode manual — gunakan tombol.' : `Otomatis ${basisName(appliedCfg)} · ${appliedCfg.autoSrc==='schedule' ? 'dalam jendela jadwal' : 'sepanjang waktu'}.`;
   }
@@ -223,10 +225,10 @@ function autoControl(avg){
   if(appliedCfg.mode==='auto' && !complete){ $('sprinklerReason').textContent=`Otomatis ${basisName(appliedCfg)} diblokir: perlu ${appliedCfg.controlBasis==='thi' ? '6 DS + 4 DHT' : '6 DS'} valid/fresh.`; return; }
   // Web TIDAK pernah menjalankan kontrol otomatis atau auto-off sendiri.
   if (appliedCfg.mode === 'manual'){
-    $('sprinklerReason').textContent = 'Mode manual · status mengikuti laporan relay ESP kanan.';
+    $('sprinklerReason').textContent = 'Mode manual · status mengikuti laporan perangkat.';
   } else {
     const value=metricValue(sensorView,appliedCfg), gated=appliedCfg.autoSrc==='schedule';
-    $('sprinklerReason').textContent=`${basisName(appliedCfg)} ${fmtValue(value)}${basisUnit(appliedCfg)} · threshold ${appliedCfg.threshold.toFixed(1)}${basisUnit(appliedCfg)}. ${gated ? 'Hanya dalam slot jadwal, bukan paksa ON. ' : ''}Hysteresis, durasi maks, dan cooldown dijalankan ESP.`;
+    $('sprinklerReason').textContent=`${basisName(appliedCfg)} ${fmtValue(value)}${basisUnit(appliedCfg)} · ambang ${appliedCfg.threshold.toFixed(1)}${basisUnit(appliedCfg)}. ${gated ? 'Hanya beroperasi dalam jadwal. ' : ''}Proteksi otomatis tetap aktif.`;
   }
 }
 
@@ -416,7 +418,7 @@ function clampToday(iso, hm){
 // Aturan: tanggal bebas (min hari ini). Khusus hari ini, jam min = sekarang+1 mnt.
 function renderSchedList(){
   const box = $('schedList'); if (!box) return;
-  const locked = CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected || savingSettings;
+  const locked = !hasAccess('settings') || CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected || savingSettings;
   box.innerHTML = '';
   const slots = schedSlots();
   if (!slots.length){
@@ -697,10 +699,10 @@ function syncButtons(){
   if (typeof closePicker === 'function') closePicker(); // anchor lama bisa hilang pas re-render
   $('btnAuto').classList.toggle('active', CFG.mode==='auto');
   $('btnManual').classList.toggle('active', CFG.mode==='manual');
-  $('btnSprayOn').disabled = $('btnSprayOff').disabled = CFG.mode!=='manual' || !controlLoaded || !fbConnected || !sensorView.online || !transportConnected;
-  $('btnManual').disabled = !fbConnected || !controlLoaded || !transportConnected || !sensorView.online || savingSettings;
+  $('btnSprayOn').disabled = $('btnSprayOff').disabled = !hasAccess('operate') || CFG.mode!=='manual' || !controlLoaded || !fbConnected || !sensorView.online || !transportConnected;
+  $('btnManual').disabled = !hasAccess('operate') || !fbConnected || !controlLoaded || !transportConnected || !sensorView.online || savingSettings;
   $('btnAuto').disabled = $('btnManual').disabled || !firmwareReady();
-  const locked = CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected || savingSettings;
+  const locked = !hasAccess('settings') || CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected || savingSettings;
   const src = curAutoSrc();
   const isThresh = src === 'threshold';
   $('srcThreshold').checked = isThresh;
@@ -729,28 +731,33 @@ function syncButtons(){
   updateModeInfo();
 }
 async function setMode(mode){
-  if (!fbConnected || !controlLoaded || !transportConnected || !sensorView.online || (mode==='auto' && !firmwareReady())){
+  if (!hasAccess('operate') || !fbConnected || !controlLoaded || !transportConnected || !sensorView.online || (mode==='auto' && !firmwareReady())){
     $('settingsStatus').textContent='Perangkat harus online dengan firmware kanan v3.1 sebelum mengaktifkan otomatis.'; return;
   }
-  try { await SCSFirebase.pushControl({mode}); CFG.mode=mode; saveCfg(); syncButtons(); }
-  catch { $('settingsStatus').textContent='Perubahan mode gagal dikirim.'; }
+  const revision=accessRevision;
+  try { await SCSFirebase.pushControl({mode}); if(revision!==accessRevision)return; CFG.mode=mode; saveCfg(); syncButtons(); }
+  catch { if(revision===accessRevision)$('settingsStatus').textContent='Perubahan mode gagal dikirim.'; }
 }
 $('btnAuto').onclick = ()=>setMode('auto');
 $('btnManual').onclick = ()=>setMode('manual');
 $('btnSprayOn').onclick = ()=> setSprinkler(true, 'tombol manual');
 $('btnSprayOff').onclick = ()=> setSprinkler(false, 'tombol manual');
 async function fbPushControl(){
-  if (!fbConnected || !controlLoaded || !transportConnected || !firmwareReady() || !window.SCSFirebase){
+  if (!hasAccess('settings') || !fbConnected || !controlLoaded || !transportConnected || !firmwareReady() || !window.SCSFirebase){
     $('settingsStatus').textContent='Belum dikirim: login, koneksi, dan firmware kanan v3.1 harus siap.'; return;
   }
   const submitted=SCSControl.normalize(SCSControl.capture(CFG));
+  const revision=accessRevision;
   savingSettings=true; syncButtons();
   try {
-    await SCSFirebase.pushControl(SCSControl.toFirebase(submitted));
+    await SCSFirebase.pushControl(SCSAccess.settingsPayload(SCSControl.toFirebase(submitted)));
+    if(revision!==accessRevision)return;
+    submitted.mode=appliedCfg.mode;
     appliedCfg=submitted; CFG=SCSControl.normalize(submitted); settingsDirty=false; saveCfg();
     $('settingsStatus').textContent=`Profil ${basisName(submitted)} tersimpan di Firebase; ESP membaca setting sekitar tiap 5 detik.`;
     pushEvent(`Setting ${basisName(submitted)}: threshold ${submitted.threshold}${basisUnit(submitted)}, ${submitted.autoSrc==='schedule' ? 'dalam jadwal' : 'sepanjang waktu'}`);
   } catch {
+    if(revision!==accessRevision)return;
     CFG=SCSControl.normalize(submitted); settingsDirty=true; saveCfg();
     $('settingsStatus').textContent='Gagal menyimpan. Perubahan masih berupa draft; coba lagi.';
   }
@@ -818,15 +825,18 @@ function setAuthView(ok, email=''){
   $('authPanel').inert=ok;
   $('btnLogout').hidden=!ok;
   $('accountEmail').textContent=ok ? email || 'Akun terautentikasi' : 'Akun terautentikasi';
+  $('profileEmail').textContent=ok ? email : '';
+  $('profileMenu').hidden=true;
+  $('profileBtn').setAttribute('aria-expanded','false');
   const name=ok ? accountNameOf(email) : 'Pengelola';
-  $('greetingName').textContent=name;
+  $('greetingName').textContent=name.charAt(0).toUpperCase()+name.slice(1);
   $('accountName').textContent=name;
   $('accountName').title=name;
   const initial=Array.from(name)[0].toUpperCase();
   $('accountAvatar').textContent=initial;
   const avatar=document.querySelector('.topbar-avatar');
   avatar.textContent=initial;
-  avatar.setAttribute('aria-label', `Akun ${name}`);
+  avatar.setAttribute('aria-label', `Buka profil ${name}`);
   if (ok){
     let page='dash';
     try { page=localStorage.getItem('scs_page') || 'dash'; } catch {}
@@ -855,6 +865,17 @@ function fbConnect(){
   }
   setFbStatus('Menghubungkan ke Firebase…', 'sim');
   SCSFirebase.connect({
+    onAccess: record=>{
+      accessRevision++;
+      accessState=SCSAccess.normalize(record);window.smartcowAccess=accessState;
+      closeSensors(false);closePicker();closeConfirm(false);
+      controlLoaded=false;settingsDirty=false;telemetry=null;lastUpdate=null;history=[];logs=[];events=[];
+      $('settingsStatus').textContent='';
+      sprinklerOn=false;sprayStart=null;
+      localStorage.removeItem('scs_logs');localStorage.removeItem('scs_events');localStorage.removeItem('scs_hist');
+      renderLogs();renderEvents();refreshTelemetry();drawChart();
+      applyAccessView();window.SCSAdmin?.sync();
+    },
     onStatus: (msg, kind)=>{ setFbStatus(msg, kind); setConn(kind); },
     onTransport: (online)=>{ transportConnected=online; syncButtons(); refreshTelemetry(); },
     onAuthError: ()=>{ sessionFailed(); setFbStatus('Sesi tidak dapat diperiksa. Periksa koneksi lalu muat ulang.','err'); },
@@ -862,11 +883,13 @@ function fbConnect(){
       fbConnected=ok;
       $('btnLogin').disabled=false;
       setAuthView(ok, email);
+      if(!ok){accessState=null;window.smartcowAccess=null;window.SCSAdmin?.sync();}
+      applyAccessView();
       if (!ok){ controlLoaded=false; settingsDirty=false; telemetry=null; transportConnected=false; lastUpdate=null; history=[]; logs=[]; events=[]; sprinklerOn=false; sprayStart=null; renderLogs(); renderEvents(); drawChart(); }
       setFbStatus(ok ? '' : 'Masuk dengan akun Firebase yang sudah ada.', 'login'); syncButtons(); refreshTelemetry();
     },
     onControl: (ctl)=>{
-      if (!fbConnected) return;
+      if (!fbConnected || !hasAccess('monitor')) return;
       if (!ctl){ controlLoaded=false; syncButtons(); refreshTelemetry(); drawChart(); return; }
       controlLoaded=true;
       appliedCfg=SCSControl.fromFirebase(ctl);
@@ -875,7 +898,7 @@ function fbConnect(){
       saveCfg(); syncButtons(); refreshTelemetry(); renderLogs(); drawChart();
     },
     onTelemetry: (p)=>{
-      if (!fbConnected) return;
+      if (!fbConnected || !hasAccess('monitor')) return;
       onNewData(p);
       if (sensorView.ssr !== null){
         const changed=(sensorView.ssr===1)!==sprinklerOn;
@@ -884,17 +907,17 @@ function fbConnect(){
         renderSprinkler();
       }
     },
-    onSeedLogs: (rows)=>{ if (!fbConnected) return; logs = SCS.pruneLogs(rows, 120); localStorage.setItem('scs_logs', JSON.stringify(logs)); renderLogs(); },
-    onEvents: (rows)=>{ if (!fbConnected) return; events=rows; renderEvents(); }
+    onSeedLogs: (rows)=>{ if (!fbConnected || !hasAccess('monitor')) return; logs = SCS.pruneLogs(rows, 120); localStorage.setItem('scs_logs', JSON.stringify(logs)); renderLogs(); },
+    onEvents: (rows)=>{ if (!fbConnected || !hasAccess('monitor')) return; events=rows; renderEvents(); }
   })
     .catch((e)=>{ sessionFailed(); setFbStatus('Firebase: ' + e.message, 'err'); setConn('err'); });
 }
 function setConn(kind){
   const b = $('connBadge');
   if (kind==='sim'){ b.textContent='● MENGHUBUNGKAN'; b.className='badge sim'; }
-  if (kind==='live'){ b.textContent='● LIVE ESP32'; b.className='badge live'; }
+  if (kind==='live'){ b.textContent='● TERHUBUNG'; b.className='badge live'; }
   if (kind==='err'){ b.textContent='● KONEKSI GAGAL'; b.className='badge err'; }
-  if (kind==='offline'){ b.textContent='● ESP OFFLINE / DATA LAMA'; b.className='badge offline'; }
+  if (kind==='offline'){ b.textContent='● OFFLINE / DATA LAMA'; b.className='badge offline'; }
   if (kind==='login'){ b.textContent='● PERLU LOGIN'; b.className='badge sim'; }
 }
 
@@ -1016,7 +1039,7 @@ function cancelSensorClose(){
   $('sensorDialog').classList.remove('is-closing');
 }
 function openSensors(kind, trigger){
-  if (!fbConnected || !['temperature','humidity'].includes(kind)) return;
+  if (!hasAccess('monitor') || !fbConnected || !['temperature','humidity'].includes(kind)) return;
   cancelSensorClose();
   closeSide(); closePicker();
   sensorReturnFocus=trigger;
@@ -1048,9 +1071,32 @@ function closeSensors(restoreFocus=true){
   dialog.classList.add('is-closing');
   sensorCloseTimer=setTimeout(finish,240); // Safe fallback if the browser cancels animationend.
 }
+let selectedPage='dash';
+function applyAccessView(){
+  const monitor=hasAccess('monitor'),admin=hasAccess('admin');
+  $('adminNav').hidden=$('profileAdmin').hidden=!admin;
+  $('profileRole').textContent=admin?'Admin':accessState?.enabled?'User':'Akses belum aktif';
+  document.querySelectorAll('[data-permission]').forEach(n=>{n.hidden=!hasAccess(n.dataset.permission);});
+  document.querySelectorAll('.side-link').forEach(n=>{if(n.dataset.page!=='admin')n.hidden=n.dataset.page!=='dash'&&!monitor;});
+  $('accessNotice').textContent=accessState?.enabled?'Akun ini belum memiliki izin Kandang A. Hubungi Admin.':'Akses Kandang A belum aktif. Hubungi Admin untuk mendapatkan izin.';
+  if(selectedPage==='admin'&&!admin || ['log','event'].includes(selectedPage)&&!monitor)selectedPage='dash';
+  document.querySelectorAll('main.container > section').forEach(n=>{
+    let permitted=true;
+    if(n.id==='accessNotice')permitted=!monitor;
+    else if(n.dataset.page==='admin')permitted=admin;
+    else if(n.matches('.command-grid,.summary-grid,.insights-grid') || ['log','event'].includes(n.dataset.page))permitted=monitor;
+    n.hidden=!permitted || (!!n.dataset.page&&n.dataset.page!==selectedPage);
+    n.style.display=n.hidden?'none':'';
+  });
+  document.querySelectorAll('.side-link').forEach(b=>{b.classList.toggle('active',b.dataset.page===selectedPage);if(b.dataset.page===selectedPage)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+  $('pageBreadcrumb').textContent={dash:'Overview',log:'Riwayat sensor',event:'Aktivitas sprinkler',admin:'Dashboard Admin'}[selectedPage];
+  if(fbConnected)document.title=`${$('pageBreadcrumb').textContent} — SmartCow`;
+}
 function showPage(p){
   closeSensors(false);
-  if (p !== 'log' && p !== 'event') p = 'dash';
+  if (!['log','event','admin'].includes(p)) p = 'dash';
+  if(p==='admin'&&!hasAccess('admin') || ['log','event'].includes(p)&&!hasAccess('monitor'))p='dash';
+  selectedPage=p;
   let pageIndex=0;
   document.querySelectorAll('main.container > section').forEach((s) => {
     var show = (!s.dataset.page || s.dataset.page === p);
@@ -1067,9 +1113,9 @@ function showPage(p){
     }
   });
   document.querySelectorAll('.side-link').forEach((b) => { b.classList.toggle('active', b.dataset.page === p); if(b.dataset.page===p) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
-  $('pageBreadcrumb').textContent = {dash:'Overview', log:'Riwayat sensor', event:'Aktivitas sprinkler'}[p];
+  applyAccessView();
   document.title = `${$('pageBreadcrumb').textContent} — SmartCow`;
-  try { localStorage.setItem('scs_page', p); } catch {}
+  if(fbConnected)try { localStorage.setItem('scs_page', p); } catch {}
   closeSide();
   window.scrollTo(0, 0);
   if(fbConnected) $('mainContent').focus({preventScroll:true});

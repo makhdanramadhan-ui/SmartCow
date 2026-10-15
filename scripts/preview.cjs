@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const assets = new Set(['index.html', 'css/style.css', 'assets/farm-scene.svg',
   'js/core.js', 'js/control.js', 'js/telemetry.js', 'js/config.js',
-  'js/firebase-public.js', 'js/firebase.js', 'js/app.js']);
+  'js/firebase-public.js', 'js/firebase.js', 'js/app.js', 'js/access.js', 'js/admin.js']);
 const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml' };
 const port = Number(process.env.PORT || 8765);
 const server = http.createServer((req, res) => {

@@ -75,7 +75,7 @@ test('local illustration is self-contained and contains no script or remote reso
   const svg = fs.readFileSync(path.join(root, 'assets/farm-scene.svg'), 'utf8');
   assert.match(svg, /<svg /);
   assert.doesNotMatch(svg, /<script\b|<foreignObject\b|(?:href|src)\s*=\s*["']https?:/i);
-  assert.match(html, /src="assets\/farm-scene.svg\?v=41"/);
+  assert.match(html, /src="assets\/farm-scene.svg\?v=42"/);
 });
 
 test('Barn Console keeps depth selective, snapshot labels explicit and release assets versioned', () => {
@@ -89,11 +89,11 @@ test('Barn Console keeps depth selective, snapshot labels explicit and release a
   assert.match(html, /Min\/maks antar titik · pembacaan terkini/);
   assert.doesNotMatch(html, /Kenali iklimnya|MINDFUL CARE|greeting-leaf/);
   const hero = html.match(/<section class="farm-hero"[\s\S]*?<\/section>/)?.[0];
-  assert.match(hero, /Kandang utama/);
-  assert.match(hero, /id="heroHealth"/);
-  assert.match(hero, /data-sensors="temperature"/);
+  assert.match(hero, /Kandang A/);
+  assert.doesNotMatch(hero,/SISTEM \/ 01|ESP32|relay|Lihat titik sensor|hero-kicker/);
+  assert.doesNotMatch(hero, /id="heroHealth"|data-sensors=/);
   for (const url of [...html.matchAll(/(?:src|href)="((?:js|css)\/[^\"]+)"/g)].map(m => m[1])) {
-    assert.match(url, /\?v=41$/);
+    assert.match(url, /\?v=42$/);
   }
 });
 
@@ -137,7 +137,7 @@ test('preview HTTP server serves only runtime assets and refuses writes/private 
   assert.equal(page.headers.get('cache-control'), 'no-store');
   assert.match(await page.text(), /id="appShell" class="app-shell" hidden inert/);
   assert.equal((await fetch(origin + '/assets/farm-scene.svg')).status, 200);
-  assert.equal((await fetch(origin + '/js/app.js?v=41')).status, 200);
+  assert.equal((await fetch(origin + '/js/app.js?v=42')).status, 200);
   const head = await fetch(origin + '/index.html', { method: 'HEAD' });
   assert.equal(head.status, 200); assert.equal(await head.text(), '');
   for (const name of ['/.git/config', '/js/firebase-config.js', '/database.rules.json',

@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const assets = ['index.html','css/style.css','js/core.js','js/control.js','js/telemetry.js','js/config.js',
-  'js/firebase-public.js','js/firebase.js','js/app.js','assets/farm-scene.svg'];
+  'js/firebase-public.js','js/firebase.js','js/app.js','js/access.js','js/admin.js','assets/farm-scene.svg'];
 const output = path.join(root,'public');
 fs.mkdirSync(output,{recursive:true});
 // Refuse unexpected leftovers rather than silently publishing or deleting them.
