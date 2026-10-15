@@ -6,8 +6,8 @@
       ".read": "auth != null && root.child('access').child(auth.uid).child('enabled').val() == true && root.child('access').child(auth.uid).child('role').val() == 'admin'",
       "$uid": {
         ".read": "auth != null && auth.uid == $uid",
-        ".write": "(auth != null && root.child('access').child(auth.uid).child('enabled').val() == true && root.child('access').child(auth.uid).child('role').val() == 'admin') && $uid != auth.uid && data.child('role').val() != 'admin' && newData.exists() && newData.child('role').val() == 'user'",
-        ".validate": "newData.hasChildren(['email','name','role','enabled','permissions','updatedAt']) && (!(newData.child('permissions/settings').val() == true || newData.child('permissions/operate').val() == true) || newData.child('permissions/monitor').val() == true)",
+        ".write": "(auth != null && root.child('access').child(auth.uid).child('enabled').val() == true && root.child('access').child(auth.uid).child('role').val() == 'admin') && $uid != auth.uid && ((!data.exists() && newData.exists()) || (data.child('role').val() == 'user' && (!newData.exists() || newData.child('role').val() == 'user')))",
+        ".validate": "newData.hasChildren(['email','name','role','enabled','permissions','updatedAt']) && (!(newData.child('permissions/settings').val() == true || newData.child('permissions/operate').val() == true) || newData.child('permissions/monitor').val() == true) && (newData.child('role').val() != 'admin' || (newData.child('enabled').val() == true && newData.child('permissions/monitor').val() == true && newData.child('permissions/settings').val() == true && newData.child('permissions/operate').val() == true))",
         "email": {
           ".validate": "newData.isString() && newData.val().length <= 254 && (!data.exists() || newData.val() == data.val())"
         },
@@ -15,7 +15,7 @@
           ".validate": "newData.isString() && newData.val().length <= 80"
         },
         "role": {
-          ".validate": "newData.val() == 'user'"
+          ".validate": "newData.val() == 'user' || newData.val() == 'admin'"
         },
         "enabled": {
           ".validate": "newData.isBoolean()"

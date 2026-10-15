@@ -41,10 +41,10 @@ const bool={'.validate':'newData.isBoolean()'};
 const rules={rules:{'.read':false,'.write':false,
   access:{'.read':admin,$uid:{
     '.read':"auth != null && auth.uid == $uid",
-    '.write':`(${admin}) && $uid != auth.uid && data.child('role').val() != 'admin' && newData.exists() && newData.child('role').val() == 'user'`,
-    '.validate':"newData.hasChildren(['email','name','role','enabled','permissions','updatedAt']) && (!(newData.child('permissions/settings').val() == true || newData.child('permissions/operate').val() == true) || newData.child('permissions/monitor').val() == true)",
+    '.write':`(${admin}) && $uid != auth.uid && ((!data.exists() && newData.exists()) || (data.child('role').val() == 'user' && (!newData.exists() || newData.child('role').val() == 'user')))`,
+    '.validate':"newData.hasChildren(['email','name','role','enabled','permissions','updatedAt']) && (!(newData.child('permissions/settings').val() == true || newData.child('permissions/operate').val() == true) || newData.child('permissions/monitor').val() == true) && (newData.child('role').val() != 'admin' || (newData.child('enabled').val() == true && newData.child('permissions/monitor').val() == true && newData.child('permissions/settings').val() == true && newData.child('permissions/operate').val() == true))",
     email:{'.validate':"newData.isString() && newData.val().length <= 254 && (!data.exists() || newData.val() == data.val())"},
-    name:str(80),role:{'.validate':"newData.val() == 'user'"},enabled:bool,
+    name:str(80),role:{'.validate':"newData.val() == 'user' || newData.val() == 'admin'"},enabled:bool,
     permissions:{'.validate':"newData.hasChildren(['monitor','settings','operate'])",monitor:bool,settings:bool,operate:bool,$other:{'.validate':false}},
     createdAt:{'.validate':'newData.isNumber() && (!data.exists() || newData.val() == data.val())'},updatedAt:{'.validate':'newData.isNumber()'},$other:{'.validate':false}}},
   devices:{$device:{telemetry:{latest:{'.read':device('monitor')},log:{'.read':device('monitor'),'.indexOn':['ts']}},control,

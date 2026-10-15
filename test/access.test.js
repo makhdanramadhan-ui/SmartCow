@@ -28,3 +28,11 @@ test('settings save never includes mode or manual output while preserving both p
   for(const k of ['mode','manualSsr','updatedAt','updatedBy'])assert.equal(k in payload,false);
   assert.equal(payload.tempThreshold,31);assert.equal(payload.thiThreshold,72);assert.equal(payload.controlPolicyVersion,2);
 });
+test('explicit Admin creation grants all permissions but User edits cannot promote',()=>{
+  const record=A.accountRecord({email:' ADMIN@example.com ',name:' Admin ',role:'admin'},123);
+  assert.equal(record.role,'admin');assert.equal(record.enabled,true);assert.equal(record.email,'admin@example.com');
+  for(const permission of [...A.permissions,'admin'])assert.equal(A.can(record,permission),true);
+  const user=A.userRecord({email:'user@example.com',role:'admin',monitor:true},123);
+  assert.equal(user.role,'user');assert.equal(A.can(user,'admin'),false);
+  assert.throws(()=>A.accountRecord({email:'user@example.com',role:'owner'},123),/Jenis akun/);
+});

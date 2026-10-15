@@ -10,7 +10,7 @@
   <script>
   try { document.documentElement.dataset.theme = localStorage.getItem('scs_theme') === 'dark' ? 'dark' : 'light'; } catch {}
   </script>
-  <link rel="stylesheet" href="css/style.css?v=43" />
+  <link rel="stylesheet" href="css/style.css?v=44" />
 </head>
 <body>
 <!-- Local icon set: no remote font or icon library required. -->
@@ -173,24 +173,25 @@
       <section class="page-heading admin-heading" data-page="admin" hidden><div><h1>Dashboard Admin</h1><p>Kelola tim dan tentukan akses sesuai kebutuhan.</p></div><span class="page-tag"><svg class="icon" aria-hidden="true"><use href="#i-barn"/></svg>Kandang A</span></section>
       <section id="adminStatus" class="admin-feedback" data-page="admin" role="status" aria-live="polite" hidden></section>
       <section class="admin-grid" data-page="admin" hidden>
-        <article class="card admin-create" aria-labelledby="createUserTitle"><div class="admin-panel-head"><span class="admin-panel-icon"><svg class="icon" aria-hidden="true"><use href="#i-user-add"/></svg></span><div><h3 id="createUserTitle">Buat akun User</h3><p class="hint">Undang anggota baru ke kandang.</p></div></div>
+        <article class="card admin-create" aria-labelledby="createUserTitle"><div class="admin-panel-head"><span class="admin-panel-icon"><svg class="icon" aria-hidden="true"><use href="#i-user-add"/></svg></span><div><h3 id="createUserTitle">Buat akun</h3><p class="hint">Tambahkan anggota ke Kandang A.</p></div></div>
           <form id="createUserForm" class="admin-form">
+            <fieldset class="account-role-options"><legend>Jenis akun</legend><div class="account-role-switch"><label><input type="radio" name="newAccountRole" value="user" checked/><span>User</span></label><label><input type="radio" name="newAccountRole" value="admin"/><span>Admin</span></label></div></fieldset>
             <div class="admin-identity-fields">
               <label for="newUserName">Nama <span class="field-optional">Opsional</span></label><input id="newUserName" type="text" maxlength="80" autocomplete="off" placeholder="Nama anggota"/>
               <label for="newUserEmail">Email</label><input id="newUserEmail" type="email" maxlength="254" autocomplete="off" placeholder="nama@email.com" required/>
               <label for="newUserPassword">Password awal</label><input id="newUserPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password" placeholder="Minimal 8 karakter" aria-describedby="newPasswordHint" required/>
-              <p id="newPasswordHint" class="hint">Sampaikan secara privat. User dapat menggantinya lewat email reset.</p>
+              <p id="newPasswordHint" class="hint">Minimal 8 karakter. Sampaikan password secara privat.</p>
             </div>
-            <fieldset class="permission-options"><legend>Izin Kandang A</legend>
+            <fieldset id="newUserPermissions" class="permission-options"><legend>Izin Kandang A</legend>
               <label class="permission-choice"><input id="newMonitor" type="checkbox" aria-label="Monitoring" checked/><span class="permission-copy"><b>Monitoring</b><span>Suhu, kelembapan, THI &amp; riwayat</span></span></label>
               <label class="permission-choice"><input id="newSettings" type="checkbox" aria-label="Pengaturan"/><span class="permission-copy"><b>Pengaturan</b><span>Ambang, jadwal &amp; proteksi</span></span></label>
               <label class="permission-choice"><input id="newOperate" type="checkbox" aria-label="Operasi sprinkler"/><span class="permission-copy"><b>Operasi sprinkler</b><span>Mode &amp; kendali manual</span></span></label>
             </fieldset>
-            <p class="admin-permission-note">Pengaturan dan Operasi menyertakan Monitoring. User tetap bukan Admin, meski semua izin dipilih.</p>
-            <div class="admin-create-footer"><button id="btnCreateUser" class="btn blue" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-user-add"/></svg>Buat akun</button><span>Hanya izin yang dipilih akan diberikan.</span></div>
+            <p id="newRoleHint" class="admin-permission-note">Pengaturan dan Operasi menyertakan Monitoring. Semua izin tidak menjadikan User sebagai Admin.</p>
+            <div class="admin-create-footer"><button id="btnCreateUser" class="btn blue" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-user-add"/></svg>Buat akun</button></div>
           </form>
         </article>
-        <article class="admin-directory" aria-labelledby="userListTitle"><div class="admin-directory-head"><div><h3 id="userListTitle">Akun &amp; izin</h3><p class="hint">Atur akses setiap anggota, lalu simpan perubahan.</p></div><span id="userCount" class="admin-count">— akun</span></div><div id="userList" class="user-list"></div><p class="admin-directory-note"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Menonaktifkan akses akan mencabut seluruh izin kandang setelah disimpan.</p></article>
+        <article class="card admin-directory" aria-labelledby="userListTitle"><div class="admin-directory-head"><div><h3 id="userListTitle" tabindex="-1">Daftar Akun:</h3><p class="hint">Buka Tindakan untuk mengelola akses User.</p></div><span id="userCount" class="admin-count">— akun</span></div><div id="userList" class="user-list"></div><p class="admin-directory-note"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Akun Admin dikelola melalui Firebase Console.</p></article>
       </section>
     </main>
 
@@ -208,11 +209,13 @@
     </div>
   </dialog>
 
+  <dialog id="deleteUserDialog" class="delete-user-dialog" aria-labelledby="deleteUserTitle" aria-describedby="deleteUserDescription"><form method="dialog"><div class="delete-dialog-heading"><span class="admin-panel-icon"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg></span><h2 id="deleteUserTitle">Hapus akses akun?</h2></div><p id="deleteUserTarget" class="delete-user-target"></p><p id="deleteUserDescription">Akun akan hilang dari daftar SmartCow dan seluruh akses kandang dicabut. Identitas Firebase Auth tetap ada; hapus lewat Firebase Console jika ingin menghapus permanen atau memakai email ini kembali.</p><p class="delete-user-note">Tindakan ini tidak mematikan sprinkler yang sedang menyala.</p><div class="delete-user-buttons"><button id="cancelDeleteUser" class="btn" value="cancel" autofocus>Batal</button><button id="confirmDeleteUser" class="btn red" value="delete">Hapus akses</button></div></form></dialog>
+
   <div id="confirmOverlay" class="confirm-overlay" hidden><div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMsg"><div class="confirm-icon"><svg class="icon"><use href="#i-history"/></svg></div><div id="confirmTitle">Yakin?</div><div id="confirmMsg" class="hint"></div><div class="confirm-actions"><button id="confirmNo" class="btn">Batal</button><button id="confirmYes" class="btn red">Ya, hapus</button></div></div></div>
 </div>
 
 <script src="js/core.js?v=42"></script>
-<script src="js/access.js?v=42"></script>
+<script src="js/access.js?v=44"></script>
 <script src="js/control.js?v=42"></script>
 <script src="js/telemetry.js?v=42"></script>
 <script src="js/config.js?v=42"></script>
@@ -229,8 +232,8 @@ window.addEventListener('error', function (e) {
   }
 }, true);
 </script>
-<script type="module" src="js/firebase.js?v=42"></script>
+<script type="module" src="js/firebase.js?v=44"></script>
 <script src="js/app.js?v=42"></script>
-<script src="js/admin.js?v=43"></script>
+<script src="js/admin.js?v=44"></script>
 </body>
 </html>

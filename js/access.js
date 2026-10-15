@@ -17,14 +17,18 @@
     const a=normalize(access);
     return permission==='admin' ? a.enabled && a.role==='admin' : permissions.includes(permission) && a.permissions[permission];
   }
-  function userRecord({email,name='',enabled=true,monitor=false,settings=false,operate=false},now){
-    return {email:email.trim().toLowerCase(),name:name.trim(),role:'user',enabled:enabled===true,
-      permissions:{monitor:!!(monitor||settings||operate),settings:!!settings,operate:!!operate},updatedAt:now};
+  function accountRecord({email,name='',role='user',enabled=true,monitor=false,settings=false,operate=false},now){
+    if(!['user','admin'].includes(role))throw new Error('Jenis akun tidak valid.');
+    const admin=role==='admin';
+    return {email:email.trim().toLowerCase(),name:name.trim(),role,enabled:enabled===true,
+      permissions:{monitor:admin||!!(monitor||settings||operate),settings:admin||!!settings,operate:admin||!!operate},updatedAt:now};
   }
+  // Editing a User cannot silently promote it; Admin creation is a separate choice.
+  function userRecord(record,now){return accountRecord({...record,role:'user'},now);}
   // Mode/manual outputs must never travel with a settings-only save.
   function settingsPayload(payload){
     const {mode,manualSsr,updatedAt,updatedBy,...settings}=payload;
     return settings;
   }
-  return {normalize,can,userRecord,settingsPayload,permissions};
+  return {normalize,can,accountRecord,userRecord,settingsPayload,permissions};
 });

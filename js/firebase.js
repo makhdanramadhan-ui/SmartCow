@@ -1,7 +1,7 @@
 // Public SDK only. Database Rules enforce every permission independently of this UI.
 import {initializeApp,getApps,deleteApp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
-import {getDatabase,ref,onValue,update,set,push,query,orderByChild,limitToLast,serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js';
-import {getAuth,signInWithEmailAndPassword,onAuthStateChanged,signOut,initializeAuth,inMemoryPersistence,createUserWithEmailAndPassword,deleteUser,sendPasswordResetEmail} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import {getDatabase,ref,onValue,update,set,remove,push,query,orderByChild,limitToLast,serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js';
+import {getAuth,signInWithEmailAndPassword,onAuthStateChanged,signOut,initializeAuth,inMemoryPersistence,createUserWithEmailAndPassword,deleteUser} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 
 let db,auth,callbacks={},unsubs=[],accessUnsub=null,timeOffset=0,access=null,generation=0;
 const base=()=>`devices/${window.FIREBASE_CONFIG?.deviceId || 'cow-sprinkler-01'}`;
@@ -76,6 +76,7 @@ async function saveUser(uid,record){
 }
 async function createUser(record,password){
   need('admin');
+  const data=window.SCSAccess.accountRecord(record,serverTimestamp());
   // An isolated, nonpersistent Auth instance never replaces the Admin session.
   const app=initializeApp(window.FIREBASE_CONFIG,`create-user-${crypto.randomUUID()}`);
   const secondary=initializeAuth(app,{persistence:inMemoryPersistence});
@@ -83,7 +84,6 @@ async function createUser(record,password){
   try{
     created=(await createUserWithEmailAndPassword(secondary,record.email.trim(),password)).user;
     need('admin');
-    const data=window.SCSAccess.userRecord(record,serverTimestamp());
     await set(ref(db,`access/${created.uid}`),{...data,createdAt:serverTimestamp()});
     return created.uid;
   }catch(error){
@@ -98,6 +98,10 @@ async function createUser(record,password){
     try{await deleteApp(app);}catch{}
   }
 }
-async function resetPassword(email){need('admin');return sendPasswordResetEmail(auth,email);}
-window.SCSFirebase={connect,login,logout:()=>signOut(auth),pushControl,pushOverride,pushEvent,subscribeUsers,saveUser,createUser,resetPassword,
+// Removes application access only. Auth identity deletion requires an operator/backend.
+async function removeUserAccess(uid){
+  need('admin');if(uid===auth.currentUser.uid)throw new Error('Akun sendiri tidak dapat dihapus.');
+  return remove(ref(db,`access/${uid}`)); // Rules reject every existing Admin target.
+}
+window.SCSFirebase={connect,login,logout:()=>signOut(auth),pushControl,pushOverride,pushEvent,subscribeUsers,saveUser,createUser,removeUserAccess,
   now:()=>Date.now()+timeOffset};

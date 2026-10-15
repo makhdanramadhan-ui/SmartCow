@@ -93,7 +93,7 @@ test('Barn Console keeps depth selective, snapshot labels explicit and release a
   assert.doesNotMatch(hero,/SISTEM \/ 01|ESP32|relay|Lihat titik sensor|hero-kicker/);
   assert.doesNotMatch(hero, /id="heroHealth"|data-sensors=/);
   for (const url of [...html.matchAll(/(?:src|href)="((?:js|css)\/[^\"]+)"/g)].map(m => m[1])) {
-    const version = url.startsWith('css/') || url.startsWith('js/admin.js') ? 43 : 42;
+    const version = /^(?:css\/|js\/(?:admin|access|firebase)\.js)/.test(url) ? 44 : 42;
     assert.ok(url.endsWith(`?v=${version}`), `unexpected asset version: ${url}`);
   }
 });
@@ -102,7 +102,7 @@ test('Admin has a separate directory, labelled account fields and accessible per
   assert.match(html, /class="page-heading admin-heading" data-page="admin" hidden/);
   assert.match(html, /id="adminStatus"[^>]*data-page="admin"[^>]*role="status"/);
   assert.match(html, /class="card admin-create" aria-labelledby="createUserTitle"/);
-  assert.match(html, /class="admin-directory" aria-labelledby="userListTitle"/);
+  assert.match(html, /class="card admin-directory" aria-labelledby="userListTitle"/);
   for (const id of ['newUserName', 'newUserEmail', 'newUserPassword']) {
     assert.match(html, new RegExp(`<label for="${id}">`));
   }
@@ -117,6 +117,22 @@ test('Admin has a separate directory, labelled account fields and accessible per
   assert.match(css, /@container admin-directory \(min-width: 580px\)/);
   assert.match(css, /\.permission-choice input:checked::before/);
   assert.match(css, /\.permission-choice input, \.access-toggle input \{ appearance: auto/);
+});
+
+test('account role, collapsed actions, access-only deletion and theme-specific sprinkler are explicit', () => {
+  assert.match(html, /id="userListTitle"[^>]*>Daftar Akun:<\/h3>/);
+  for (const role of ['user', 'admin']) assert.match(html, new RegExp(`name="newAccountRole" value="${role}"`));
+  assert.match(html, /id="deleteUserDialog"[^>]*aria-describedby="deleteUserDescription"/);
+  assert.match(html, /Identitas Firebase Auth tetap ada/);
+  const admin = fs.readFileSync(path.join(root, 'js/admin.js'), 'utf8');
+  const firebase = fs.readFileSync(path.join(root, 'js/firebase.js'), 'utf8');
+  assert.match(admin, /panel\.hidden=!expanded\.has\(user\.uid\)/);
+  assert.match(admin, /setAttribute\('aria-expanded'/);
+  assert.match(admin, /SCSFirebase\.removeUserAccess\(user\.uid\)/);
+  assert.doesNotMatch(admin + html + firebase, /Kirim email reset|sendPasswordResetEmail|resetPassword/);
+  const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
+  assert.match(css, /:root\[data-theme="dark"\] \.sprinkler-card \{ --card: #2b3545/);
+  assert.match(css, /\.sprinkler-card \{ color: var\(--txt\); \}/);
 });
 
 test('configuration precedes a full-width chart with three labelled responsive control groups', () => {
