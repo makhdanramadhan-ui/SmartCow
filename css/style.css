@@ -172,6 +172,15 @@ button, a, input, select { touch-action: manipulation; }
 .admin-feedback:not(:empty) { padding: 14px 18px; border: 1px solid var(--line); border-left: 3px solid var(--blue); border-radius: 10px; color: var(--txt); background: var(--card); font-size: 14px; line-height: 1.7; }
 .admin-grid { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 36px; align-items: start; }
 .admin-grid .admin-create { padding: 28px; }
+.admin-accounts { display: grid; gap: 24px; min-width: 0; }
+.current-account { container: current-account / inline-size; }
+.current-account-identity { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.current-account .user-avatar { color: var(--cool-txt); background: var(--cool-bg); box-shadow: none; border-color: transparent; }
+.current-account .user-role { color: var(--cool-txt); border-color: var(--cool-txt); }
+@container current-account (max-width: 459px) {
+  .current-account .current-account-identity { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px; }
+  .current-account-identity .user-state { grid-column: 2; }
+}
 .admin-panel-head { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
 .admin-panel-head > div { min-width: 0; }
 .admin-panel-icon { width: 46px; height: 46px; flex: none; display: grid; place-items: center; border: 1px solid var(--edge); border-radius: 14px; color: var(--blue); background: var(--card); box-shadow: var(--raised-sm); }

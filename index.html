@@ -10,7 +10,7 @@
   <script>
   try { document.documentElement.dataset.theme = localStorage.getItem('scs_theme') === 'dark' ? 'dark' : 'light'; } catch {}
   </script>
-  <link rel="stylesheet" href="css/style.css?v=44" />
+  <link rel="stylesheet" href="css/style.css?v=45" />
 </head>
 <body>
 <!-- Local icon set: no remote font or icon library required. -->
@@ -191,7 +191,10 @@
             <div class="admin-create-footer"><button id="btnCreateUser" class="btn blue" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-user-add"/></svg>Buat akun</button></div>
           </form>
         </article>
-        <article class="card admin-directory" aria-labelledby="userListTitle"><div class="admin-directory-head"><div><h3 id="userListTitle" tabindex="-1">Daftar Akun:</h3><p class="hint">Buka Tindakan untuk mengelola akses User.</p></div><span id="userCount" class="admin-count">— akun</span></div><div id="userList" class="user-list"></div><p class="admin-directory-note"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Akun Admin dikelola melalui Firebase Console.</p></article>
+        <div class="admin-accounts">
+          <article class="card current-account" aria-labelledby="currentAccountTitle"><h3 id="currentAccountTitle">Akun saat ini:</h3><div class="current-account-identity user-heading"><span id="currentAccountAvatar" class="user-avatar" aria-hidden="true"></span><div class="user-identity"><div class="user-name"><b id="currentAccountName"></b><span id="currentAccountRole" class="user-role"></span></div><span id="currentAccountEmail" class="user-email"></span></div><span id="currentAccountState" class="user-state"></span></div></article>
+          <article class="card admin-directory" aria-labelledby="userListTitle"><div class="admin-directory-head"><div><h3 id="userListTitle" tabindex="-1">Daftar Akun:</h3><p class="hint">Buka Tindakan untuk mengelola akses User.</p></div><span id="userCount" class="admin-count">— akun</span></div><div id="userList" class="user-list"></div><p class="admin-directory-note"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Akun Admin dikelola melalui Firebase Console.</p></article>
+        </div>
       </section>
     </main>
 
@@ -234,6 +237,6 @@ window.addEventListener('error', function (e) {
 </script>
 <script type="module" src="js/firebase.js?v=44"></script>
 <script src="js/app.js?v=42"></script>
-<script src="js/admin.js?v=44"></script>
+<script src="js/admin.js?v=45"></script>
 </body>
 </html>

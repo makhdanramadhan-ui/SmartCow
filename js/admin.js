@@ -22,6 +22,18 @@
     const name=String(user.name||user.email||'?').trim().split('@')[0],words=name.split(/\s+/).filter(Boolean);
     return (words.length>1?words[0][0]+words[words.length-1][0]:name.slice(0,2)).toLocaleUpperCase('id');
   }
+  function syncCurrentAccount(){
+    // This is the session's own access record, never the first account in the directory.
+    const account=allowed()?window.smartcowAccess:null;
+    const email=account?.email||'',fallback=email.split('@')[0]||'Pengelola';
+    const name=account?(account.name?.trim()||fallback.charAt(0).toUpperCase()+fallback.slice(1)):'';
+    el('currentAccountName').textContent=name;
+    el('currentAccountEmail').textContent=email;
+    el('currentAccountAvatar').textContent=account?initials({name,email}):'';
+    el('currentAccountRole').textContent=account?'Admin':'';
+    el('currentAccountState').textContent=account?'Aktif':'';
+    el('currentAccountState').classList.toggle('is-active',!!account);
+  }
   const deleteDialog=el('deleteUserDialog');
   deleteDialog.addEventListener('close',()=>{
     const resolve=deleteResolve;deleteResolve=null;resolve?.(deleteDialog.returnValue==='delete');
@@ -82,6 +94,7 @@
   window.SCSAdmin={sync(){
     const current=++epoch;stop?.();stop=null;expanded.clear();if(deleteDialog.open)deleteDialog.close('cancel');
     el('userList').replaceChildren();el('userCount').textContent='— akun';el('newUserPassword').value='';status('');
+    syncCurrentAccount();
     if(!allowed())return;status('Memuat akun…');
     try{stop=SCSFirebase.subscribeUsers(users=>{if(current!==epoch||!allowed())return;render(users);if(el('adminStatus').textContent==='Memuat akun…')status('');},()=>{if(current===epoch){el('userList').replaceChildren();el('userCount').textContent='— akun';status('Daftar akun tidak dapat dimuat. Periksa koneksi.');}});}
     catch(error){status(message(error));}

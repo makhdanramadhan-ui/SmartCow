@@ -1,9 +1,10 @@
-# Admin & User — Kandang A (v44)
+# Admin & User — Kandang A (v45)
 
 ## Penggunaan
 
 - Admin pertama yang disetujui: **akhdan@gmail.com**, memakai akun/password Firebase Auth yang sudah ada. Password tidak diubah oleh rilis ini.
 - Buka **Dashboard Admin** dari avatar kanan atas atau menu sidebar kiri.
+- Kartu **Akun saat ini:** di atas **Daftar Akun:** menunjukkan nama, email, role, dan status akun yang sedang login. Kartu ini hanya untuk informasi; tidak menyediakan pengubahan akun Admin.
 - Pilih jenis akun **User / Admin**, lalu isi nama, email dan password awal minimal 8 karakter. User mendapat izin yang dipilih; Admin mendapat seluruh izin termasuk pengelolaan User dan pembuatan akun. Sampaikan password secara privat. Password tidak disimpan di RTDB, log aplikasi, ataupun penyimpanan browser oleh fitur Admin.
 - Di panel **Daftar Akun:**, buka **Tindakan** pada kartu User untuk menampilkan izin, **Akses aktif**, **Simpan perubahan**, dan **Hapus akun**. Tidak ada lagi tombol kirim email reset.
 - Hilangkan **Akses aktif**, lalu simpan untuk mencabut akses Kandang A tanpa menghapus pilihan izin. **Hapus akun** memakai dialog konfirmasi, menghapus record `/access/<uid>` dan menghilangkan User dari daftar SmartCow. Identitas Firebase Auth tetap ada; email tersebut tidak dapat dibuat ulang sebelum identitasnya dihapus melalui Firebase Console. Operasi hapus tidak pernah dijalankan tanpa konfirmasi.

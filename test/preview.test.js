@@ -93,7 +93,7 @@ test('Barn Console keeps depth selective, snapshot labels explicit and release a
   assert.doesNotMatch(hero,/SISTEM \/ 01|ESP32|relay|Lihat titik sensor|hero-kicker/);
   assert.doesNotMatch(hero, /id="heroHealth"|data-sensors=/);
   for (const url of [...html.matchAll(/(?:src|href)="((?:js|css)\/[^\"]+)"/g)].map(m => m[1])) {
-    const version = /^(?:css\/|js\/(?:admin|access|firebase)\.js)/.test(url) ? 44 : 42;
+    const version = /^(?:css\/|js\/admin\.js)/.test(url) ? 45 : /^js\/(?:access|firebase)\.js/.test(url) ? 44 : 42;
     assert.ok(url.endsWith(`?v=${version}`), `unexpected asset version: ${url}`);
   }
 });
@@ -133,6 +133,20 @@ test('account role, collapsed actions, access-only deletion and theme-specific s
   const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
   assert.match(css, /:root\[data-theme="dark"\] \.sprinkler-card \{ --card: #2b3545/);
   assert.match(css, /\.sprinkler-card \{ color: var\(--txt\); \}/);
+});
+
+test('current account has a read-only card above the account directory in the same column', () => {
+  const column = html.match(/<div class="admin-accounts">([\s\S]*?)<\/article>\s*<\/div>/)?.[1];
+  assert.ok(column);
+  assert.match(column, /class="card current-account" aria-labelledby="currentAccountTitle"/);
+  assert.match(column, /id="currentAccountTitle">Akun saat ini:<\/h3>/);
+  assert.ok(column.indexOf('id="currentAccountTitle"') < column.indexOf('id="userListTitle"'));
+  const card = column.slice(0, column.indexOf('</article>'));
+  for (const field of ['Name', 'Email', 'Avatar', 'Role', 'State']) assert.ok(card.includes(`id="currentAccount${field}"`));
+  assert.doesNotMatch(card, /<button|<input|<form/);
+  const admin = fs.readFileSync(path.join(root, 'js/admin.js'), 'utf8');
+  assert.match(admin, /const account=allowed\(\)\?window\.smartcowAccess:null/);
+  assert.match(admin, /syncCurrentAccount\(\);/);
 });
 
 test('configuration precedes a full-width chart with three labelled responsive control groups', () => {
