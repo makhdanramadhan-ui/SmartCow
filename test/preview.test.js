@@ -75,7 +75,7 @@ test('local illustration is self-contained and contains no script or remote reso
   const svg = fs.readFileSync(path.join(root, 'assets/farm-scene.svg'), 'utf8');
   assert.match(svg, /<svg /);
   assert.doesNotMatch(svg, /<script\b|<foreignObject\b|(?:href|src)\s*=\s*["']https?:/i);
-  assert.match(html, /src="assets\/farm-scene.svg\?v=40"/);
+  assert.match(html, /src="assets\/farm-scene.svg\?v=41"/);
 });
 
 test('Barn Console keeps depth selective, snapshot labels explicit and release assets versioned', () => {
@@ -93,8 +93,27 @@ test('Barn Console keeps depth selective, snapshot labels explicit and release a
   assert.match(hero, /id="heroHealth"/);
   assert.match(hero, /data-sensors="temperature"/);
   for (const url of [...html.matchAll(/(?:src|href)="((?:js|css)\/[^\"]+)"/g)].map(m => m[1])) {
-    assert.match(url, /\?v=40$/);
+    assert.match(url, /\?v=41$/);
   }
+});
+
+test('configuration precedes a full-width chart with three labelled responsive control groups', () => {
+  const insights = html.slice(html.indexOf('<section class="grid insights-grid"'), html.indexOf('<section class="page-heading" data-page="log"'));
+  assert.ok(insights.indexOf('class="card control-card"') < insights.indexOf('class="card chart-card"'));
+  assert.doesNotMatch(insights, /grid-2/);
+  assert.equal((insights.match(/class="control-section(?: protection-section)?"/g) || []).length, 3);
+  for (const id of ['basisTitle', 'sourceTitle', 'protectionTitle']) {
+    assert.match(insights, new RegExp(`aria-labelledby="${id}"`));
+    assert.match(insights, new RegExp(`<h4 id="${id}">`));
+  }
+  assert.match(insights, /class="control-actions"[\s\S]*id="btnSaveCfg"/);
+  const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
+  assert.match(css, /\.insights-grid\s*\{\s*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /container: sprinkler-config \/ inline-size/);
+  assert.match(css, /@container sprinkler-config \(min-width: 680px\)/);
+  assert.match(css, /@container sprinkler-config \(min-width: 1000px\)/);
+  assert.match(css, /\.control-card #schedList\s*\{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(css, /--radius: 14px/);
 });
 
 test('preview HTTP server serves only runtime assets and refuses writes/private paths', async t => {
@@ -118,7 +137,7 @@ test('preview HTTP server serves only runtime assets and refuses writes/private 
   assert.equal(page.headers.get('cache-control'), 'no-store');
   assert.match(await page.text(), /id="appShell" class="app-shell" hidden inert/);
   assert.equal((await fetch(origin + '/assets/farm-scene.svg')).status, 200);
-  assert.equal((await fetch(origin + '/js/app.js?v=40')).status, 200);
+  assert.equal((await fetch(origin + '/js/app.js?v=41')).status, 200);
   const head = await fetch(origin + '/index.html', { method: 'HEAD' });
   assert.equal(head.status, 200); assert.equal(await head.text(), '');
   for (const name of ['/.git/config', '/js/firebase-config.js', '/database.rules.json',

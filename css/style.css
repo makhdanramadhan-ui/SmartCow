@@ -6,7 +6,7 @@
   --amber: #935214; --blue: #205dc0; --cyan: #205dc0;
   --positive-bg: #d7eae4; --positive-txt: #146452; --warning-bg: #f5e3c5; --warning-txt: #854910;
   --negative-bg: #f4dce0; --negative-txt: #a52c3c; --cool-bg: #dbe6f8; --cool-txt: #2059ac;
-  --shadow: 9px 9px 22px #c5ccd7, -9px -9px 22px #ffffff; --radius: 22px;
+  --shadow: 9px 9px 22px #c5ccd7, -9px -9px 22px #ffffff; --radius: 14px;
   --raised-sm: 4px 4px 9px #c5ccd7, -4px -4px 9px #ffffff;
   --inset: inset 4px 4px 9px #c6cdd8, inset -4px -4px 9px #ffffff;
   --edge: #ffffffb3; --warm: #b7461b; --warm-bg: #f6dfd2; --nav: #252d3a;
@@ -311,7 +311,39 @@ button, a, input, select { touch-action: manipulation; }
 .method-note .icon { width: 14px; height: 14px; margin-top: 2px; color: var(--cyan); }
 .method-note p { margin: 0; font-size: 13px; line-height: 1.8; }
 .method-note b { font-weight: 600; }
-.grid-2 { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; gap: 28px; }
+.insights-grid { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+.control-card { container: sprinkler-config / inline-size; }
+.control-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; margin-top: 24px; }
+.control-section, .control-values > div { min-width: 0; }
+.control-section + .control-section { padding-top: 22px; border-top: 1px solid var(--line); }
+.control-layout .control-step { margin: 0 0 18px; }
+.control-values { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.control-values .form-grid label { justify-content: space-between; }
+.control-card #protectGroup .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.control-card .sched-box { margin-top: 24px; }
+.control-actions { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
+.control-actions .save-note { text-align: left; margin: 0 !important; }
+.control-actions .btn.full { width: auto; min-width: 240px; margin: 0; }
+.insights-grid .chart-card #chart { height: 280px; }
+/* Follow the actual panel width, including when the desktop sidebar is open. */
+@container sprinkler-config (min-width: 680px) {
+  .control-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .control-layout .src-card { min-height: 96px; }
+  .control-section + .control-section { padding-top: 0; border-top: 0; }
+  .control-section:nth-child(2) { border-left: 1px solid var(--line); padding-left: 24px; }
+  .protection-section { grid-column: 1 / -1; }
+  .control-layout .protection-section { padding-top: 24px; border-top: 1px solid var(--line); }
+  .control-values { grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: 16px; }
+  .control-values .form-grid label > span { min-height: 2.8em; }
+}
+@container sprinkler-config (min-width: 1000px) {
+  .control-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr); }
+  .control-layout .src-card { min-height: 120px; padding: 12px 10px; gap: 8px; }
+  .control-layout .protection-section { grid-column: auto; border-top: 0; padding-top: 0; border-left: 1px solid var(--line); padding-left: 24px; }
+  .control-values { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .control-values #threshGroup label > span { min-height: 0; }
+  .control-card #schedList { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
 .card-head .eyebrow { font-size: 12px; letter-spacing: 1px; margin-bottom: 12px; }
 .card-head h3 { font-size: 21px; letter-spacing: -.5px; }
@@ -357,7 +389,7 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color:
 .control-card .notice { font-size: 14px; }
 .sched-box { background: var(--card); box-shadow: var(--inset); border: 1px solid var(--edge); border-radius: 16px; padding: 16px; margin-top: 16px; }
 .sched-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 14px; color: var(--txt); }
-#schedList { display: flex; flex-direction: column; gap: 9px; }
+#schedList { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .sched-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--line); border-radius: 9px; padding: 10px; }
 .sched-num { color: var(--muted); font-weight: 650; font-size: 14px; }
 .sched-groups { display: flex; flex-wrap: wrap; gap: 9px; flex: 1; }
@@ -475,9 +507,7 @@ td.cold { color: var(--positive-txt); }
   .grid-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   .sensor { padding: 16px; }
   .sensor .s-temp { font-size: 34px; }
-  .grid-2 { grid-template-columns: 1fr; }
   .chart-card #chart { height: 280px; }
-  .control-card #protectGroup .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .control-card .src-card { padding: 14px; }
   .control-card .src-card b { font-size: 15px; }
   .control-card .src-card span { font-size: 13px; }
@@ -615,7 +645,7 @@ td.cold { color: var(--positive-txt); }
   .sensor .s-temp { font-size: 28px; padding: 9px 7px; }
   .humidity-grid { gap: 10px; }
   .humidity-sensor .s-temp { font-size: 31px; }
-  .card { padding: 20px; border-radius: 20px; }
+  .card { padding: 20px; border-radius: var(--radius); }
   .chart-toolbar { gap: 10px; flex-wrap: wrap; }
   .chart-toolbar select { font-size: 14px; padding: 11px; min-width: 0; }
   .chart-card #chart { height: 230px; }
@@ -625,6 +655,9 @@ td.cold { color: var(--positive-txt); }
   .control-card .src-card span { font-size: 13px; }
   .auto-src { grid-template-columns: 1fr; }
   .control-card #protectGroup .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .control-actions { gap: 16px; }
+  .control-actions .btn.full { width: 100%; min-width: 0; }
+  .insights-grid .chart-card #chart { height: 230px; }
   .card-head h3 { font-size: 21px; }
   .toolbar { gap: 7px; }
   .toolbar .btn { font-size: 13px; }

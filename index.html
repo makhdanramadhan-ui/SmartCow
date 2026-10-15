@@ -10,7 +10,7 @@
   <script>
   try { document.documentElement.dataset.theme = localStorage.getItem('scs_theme') === 'dark' ? 'dark' : 'light'; } catch {}
   </script>
-  <link rel="stylesheet" href="css/style.css?v=40" />
+  <link rel="stylesheet" href="css/style.css?v=41" />
 </head>
 <body>
 <!-- Local icon set: no remote font or icon library required. -->
@@ -48,7 +48,7 @@
       <p>Suhu, kelembapan, dan THI agregat dari dua node ESP32. Status perangkat dan kendali sprinkler dalam satu panel.</p>
     </div>
     <div class="auth-scene">
-      <img src="assets/farm-scene.svg?v=40" alt="Ilustrasi kandang dengan atap jingga, sapi, dan dua node sensor" width="760" height="470" fetchpriority="high" />
+      <img src="assets/farm-scene.svg?v=41" alt="Ilustrasi kandang dengan atap jingga, sapi, dan dua node sensor" width="760" height="470" fetchpriority="high" />
       <div class="scene-caption"><span class="scene-caption-icon"><svg class="icon"><use href="#i-signal"/></svg></span><div><b>Dua node. Satu sistem.</b><span>6 DS18B20 &nbsp; / &nbsp; 4 DHT22 &nbsp; / &nbsp; 1 relay</span></div></div>
     </div>
     <div class="auth-story-footer"><span>SMARTCOW / IoT</span><span>Akses pengelola kandang</span></div>
@@ -107,7 +107,7 @@
       <section class="page-heading" data-page="dash"><div><div class="eyebrow">PANEL KANDANG</div><h1>Halo, <span id="greetingName">Pengelola</span>.</h1><p>Pembacaan sensor dan kendali sprinkler.</p></div><div class="clock-card"><div><svg class="icon"><use href="#i-history"/></svg><span id="clock" class="clock">--:--:--</span><span class="wib-badge">WIB</span></div><div id="dateLine" class="date-line">Memuat waktu…</div></div></section>
 
       <section class="farm-hero" data-page="dash">
-        <div class="hero-art"><img src="assets/farm-scene.svg?v=40" alt="" width="760" height="470"/></div>
+        <div class="hero-art"><img src="assets/farm-scene.svg?v=41" alt="" width="760" height="470"/></div>
         <div class="hero-copy"><div class="hero-kicker">SISTEM / 01</div><h2>Kandang utama</h2><p>2 ESP32 <span>/</span> 6 suhu <span>/</span> 4 kelembapan <span>/</span> 1 relay</p><span id="heroHealth" class="hero-health">Menunggu pembacaan sensor</span></div>
         <button class="hero-link" type="button" data-sensors="temperature" aria-haspopup="dialog" aria-controls="sensorDialog">Lihat titik sensor <svg class="icon"><use href="#i-arrow"/></svg></button>
       </section>
@@ -123,9 +123,46 @@
         <article class="card metric-card thi-summary"><div class="metric-heading"><span class="metric-icon sage"><svg class="icon"><use href="#i-leaf"/></svg></span><div><div class="card-label">Indeks THI kandang</div><span class="metric-source">Agregat suhu &amp; kelembapan</span></div><span class="metric-code">THI</span></div><div class="avg-value"><span id="thiValue">—</span><span class="unit">THI</span></div><div id="thiStatus" class="status-pill neutral">MENUNGGU DATA</div><div class="mini-stats" data-threshold-basis="thi" hidden><div>Ambang THI <b id="thiThresholdLabel">—</b></div></div><p class="thi-method">Dihitung dari rata-rata 6 suhu DS dan 4 kelembapan DHT. Bukan THI per titik atau diagnosis stres.</p><p id="thiSummary" class="hint metric-footnote">Rata-rata 6 DS + RH rata-rata 4 DHT</p></article>
       </section>
 
-      <section class="grid grid-2 insights-grid" data-page="dash">
+      <section class="grid insights-grid" data-page="dash" aria-label="Konfigurasi sprinkler dan tren sensor">
+        <article class="card control-card" aria-labelledby="controlTitle">
+          <div class="card-head"><div><div class="eyebrow">KONFIGURASI SPRINKLER</div><h3 id="controlTitle">Atur sesuai kebutuhan kandang.</h3><p class="hint">Perubahan berlaku setelah disimpan.</p></div><svg class="icon muted-icon"><use href="#i-settings"/></svg></div>
+          <div id="firmwareNotice" class="notice" role="status" hidden>Upload firmware kanan v3.1 terlebih dahulu. Firmware lama belum menjalankan kontrol THI/jadwal bersyarat.</div>
+          <div id="settingsStatus" class="settings-status" role="status" aria-live="polite"></div>
+          <div class="control-layout">
+            <section class="control-section" aria-labelledby="basisTitle">
+              <div class="control-step"><span>01</span><h4 id="basisTitle">Dasar kontrol</h4></div>
+              <div class="auto-src basis-selector">
+                <label class="src-card"><input type="radio" name="controlBasis" id="basisTemperature" value="temperature" checked/><div><b>Suhu DS</b><span>Wajib 6 DS valid</span></div></label>
+                <label class="src-card"><input type="radio" name="controlBasis" id="basisThi" value="thi"/><div><b>THI agregat</b><span>6 DS + 4 DHT valid</span></div></label>
+              </div>
+              <p id="controlBasisHint" class="hint">Hanya profil terpilih yang mengendalikan relay. Suhu dan THI tersimpan terpisah.</p>
+            </section>
+            <section class="control-section" aria-labelledby="sourceTitle">
+              <div class="control-step"><span>02</span><h4 id="sourceTitle">Waktu operasi</h4></div>
+              <div class="auto-src">
+                <label class="src-card"><input type="radio" name="autoSrc" id="srcThreshold" value="threshold" checked/><div><b>Sepanjang waktu</b><span>Ikuti ambang terpilih</span></div></label>
+                <label class="src-card"><input type="radio" name="autoSrc" id="srcSchedule" value="schedule"/><div><b>Dalam jadwal</b><span>Ambang + jendela waktu</span></div></label>
+              </div>
+            </section>
+            <section class="control-section protection-section" aria-labelledby="protectionTitle">
+              <div class="control-step"><span>03</span><h4 id="protectionTitle">Ambang &amp; proteksi</h4></div>
+              <div class="control-values">
+                <div id="threshGroup">
+                  <div class="form-grid"><label><span id="thresholdInputLabel">Threshold semprot suhu (°C)</span><input id="inThreshold" type="number" step="0.1" min="20" max="40" value="30.0"/></label></div>
+                  <div class="range-row"><input id="rangeThreshold" aria-label="Geser threshold semprot" type="range" min="20" max="40" step="0.1" value="30"/></div>
+                </div>
+                <div id="protectGroup"><div class="form-grid">
+                  <label><span id="hysteresisInputLabel">Hysteresis (°C)</span><input id="inHysteresis" type="number" min="0" max="50" step="0.1" value="1"/></label>
+                  <label><span>Durasi maks (detik)</span><input id="inMaxDur" type="number" step="1" min="1" max="10800" value="120"/></label>
+                  <label><span>Cooldown (detik)</span><input id="inCooldown" type="number" step="1" min="0" max="10800" value="60"/></label>
+                </div></div>
+              </div>
+            </section>
+          </div>
+          <div class="sched-box" id="schedGroup"><div class="sched-head"><span id="scheduleTitle">Jendela jadwal Suhu (maks 6×)</span><button id="btnAddSched" class="btn small">＋ Tambah</button></div><div id="schedList"></div><div id="schedHint" class="hint"></div></div>
+          <div class="control-actions"><p class="hint save-note"><svg class="icon"><use href="#i-lock"/></svg> Pengaturan otomatis mengikuti kelengkapan sensor.</p><button id="btnSaveCfg" class="btn blue full">Simpan pengaturan</button></div>
+        </article>
         <article class="card chart-card"><div class="card-head"><div><div class="eyebrow">DATA / GRAFIK</div><h3>Tren sensor</h3><p class="hint">Pengamatan satu jam terakhir · celah berarti data tidak tersedia</p></div><span class="subtle-tag">1 JAM</span></div><div class="chart-toolbar"><select id="chartMetric" aria-label="Jenis grafik"><option value="temperature">Suhu DS (°C)</option><option value="humidity">Kelembapan DHT (%RH)</option><option value="thi">THI agregat</option></select><label class="checkbox-label"><input type="checkbox" id="showAvg" checked/> Rata-rata</label></div><div class="legend" id="legend"></div><canvas id="chart" height="220" role="img" aria-label="Grafik tren sensor satu jam terakhir. Nilai terbaru tersedia di kartu sensor."></canvas><div class="chart-bottom"><span class="hint">Data mengikuti laporan ESP kanan.</span><button id="btnClearChart" class="btn small">Bersihkan grafik</button></div><div class="chart-explainer"><svg class="icon"><use href="#i-signal"/></svg><p>Garis putus-putus hanya tampil pada grafik dasar kontrol yang tersimpan, sesuai ambang pengguna. Pembacaan yang hilang tidak dianggap nol.</p></div></article>
-        <article class="card control-card"><div class="card-head"><div><div class="eyebrow">KONFIGURASI SPRINKLER</div><h3>Atur sesuai kebutuhan kandang.</h3><p class="hint">Perubahan berlaku setelah disimpan.</p></div><svg class="icon muted-icon"><use href="#i-settings"/></svg></div><div class="control-step"><span>01</span><h4>Dasar kontrol</h4></div><div class="auto-src basis-selector"><label class="src-card"><input type="radio" name="controlBasis" id="basisTemperature" value="temperature" checked/><div><b>Suhu DS</b><span>Wajib 6 DS valid</span></div></label><label class="src-card"><input type="radio" name="controlBasis" id="basisThi" value="thi"/><div><b>THI agregat</b><span>6 DS + 4 DHT valid</span></div></label></div><p id="controlBasisHint" class="hint">Hanya profil terpilih yang mengendalikan relay. Suhu dan THI tersimpan terpisah.</p><div id="firmwareNotice" class="notice" role="status" hidden>Upload firmware kanan v3.1 terlebih dahulu. Firmware lama belum menjalankan kontrol THI/jadwal bersyarat.</div><div id="settingsStatus" class="settings-status" role="status" aria-live="polite"></div><div class="control-step"><span>02</span><h4>Waktu operasi</h4></div><div class="auto-src"><label class="src-card"><input type="radio" name="autoSrc" id="srcThreshold" value="threshold" checked/><div><b>Sepanjang waktu</b><span>Ikuti ambang terpilih</span></div></label><label class="src-card"><input type="radio" name="autoSrc" id="srcSchedule" value="schedule"/><div><b>Dalam jadwal</b><span>Ambang + jendela waktu</span></div></label></div><div class="control-step"><span>03</span><h4>Ambang &amp; proteksi</h4></div><div id="threshGroup"><div class="form-grid"><label><span id="thresholdInputLabel">Threshold semprot suhu (°C)</span><input id="inThreshold" type="number" step="0.1" min="20" max="40" value="30.0"/></label></div><div class="range-row"><input id="rangeThreshold" aria-label="Geser threshold semprot" type="range" min="20" max="40" step="0.1" value="30"/></div></div><div id="protectGroup"><div class="form-grid"><label><span id="hysteresisInputLabel">Hysteresis (°C)</span><input id="inHysteresis" type="number" min="0" max="50" step="0.1" value="1"/></label><label>Durasi maks (detik)<input id="inMaxDur" type="number" step="1" min="1" max="10800" value="120"/></label><label>Cooldown (detik)<input id="inCooldown" type="number" step="1" min="0" max="10800" value="60"/></label></div></div><div class="sched-box" id="schedGroup"><div class="sched-head"><span id="scheduleTitle">Jendela jadwal Suhu (maks 6×)</span><button id="btnAddSched" class="btn small">＋ Tambah</button></div><div id="schedList"></div><div id="schedHint" class="hint"></div></div><button id="btnSaveCfg" class="btn blue full">Simpan pengaturan</button><p class="hint save-note"><svg class="icon"><use href="#i-lock"/></svg> Pengaturan otomatis mengikuti kelengkapan sensor.</p></article>
       </section>
 
       <section class="page-heading" data-page="log"><div><div class="eyebrow">DATA / RIWAYAT</div><h1>Riwayat sensor<span class="heading-period">.</span></h1><p>Pembacaan suhu, kelembapan, dan THI dari perangkat.</p></div><span class="page-tag"><svg class="icon"><use href="#i-history"/></svg> 120 pembacaan terakhir</span></section>
@@ -152,11 +189,11 @@
   <div id="confirmOverlay" class="confirm-overlay" hidden><div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMsg"><div class="confirm-icon"><svg class="icon"><use href="#i-history"/></svg></div><div id="confirmTitle">Yakin?</div><div id="confirmMsg" class="hint"></div><div class="confirm-actions"><button id="confirmNo" class="btn">Batal</button><button id="confirmYes" class="btn red">Ya, hapus</button></div></div></div>
 </div>
 
-<script src="js/core.js?v=40"></script>
-<script src="js/control.js?v=40"></script>
-<script src="js/telemetry.js?v=40"></script>
-<script src="js/config.js?v=40"></script>
-<script src="js/firebase-public.js?v=40"></script>
+<script src="js/core.js?v=41"></script>
+<script src="js/control.js?v=41"></script>
+<script src="js/telemetry.js?v=41"></script>
+<script src="js/config.js?v=41"></script>
+<script src="js/firebase-public.js?v=41"></script>
 <script>
 window.addEventListener('error', function (e) {
   if (!window.SCSFirebase && ((e.message && e.message !== 'Script error.') || e.target?.tagName === 'SCRIPT')) {
@@ -169,7 +206,7 @@ window.addEventListener('error', function (e) {
   }
 }, true);
 </script>
-<script type="module" src="js/firebase.js?v=40"></script>
-<script src="js/app.js?v=40"></script>
+<script type="module" src="js/firebase.js?v=41"></script>
+<script src="js/app.js?v=41"></script>
 </body>
 </html>
