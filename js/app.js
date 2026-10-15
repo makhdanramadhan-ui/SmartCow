@@ -1,8 +1,8 @@
 /* SmartCow FINAL — Firebase, 6 DS18B20 + 4 DHT22. Relay milik ESP kanan. */
 const $ = (id) => document.getElementById(id);
 const SENSOR_NAMES = ['Titik 1 • Depan', 'Titik 2 • Depan', 'Titik 3 • Tengah', 'Titik 4 • Tengah', 'Titik 5 • Belakang', 'Titik 6 • Belakang'];
-const COLORS = ['#b5734d','#a28c3c','#678c53','#4a8b82','#608aad','#a87a95'];
-const AVG_COLOR = '#739b50';
+const COLORS = ['#b64c26','#a26a00','#167866','#3f70c4','#9563bb','#bb507b'];
+const AVG_COLOR = '#167866';
 
 let temps = Array(6).fill(null);
 let humidities = Array(4).fill(null);
@@ -39,8 +39,8 @@ function applyTheme(t){
 }
 function chartTheme(){
   return document.documentElement.dataset.theme === 'light'
-    ? { grid: '#dfe5d6', txt: '#70806a', empty: '#78846e', threshold: '#a77935', thi: '#527d48' }
-    : { grid: '#324b3a', txt: '#b3c3aa', empty: '#a5b5a4', threshold: '#e2bf77', thi: '#b7d69f' };
+    ? { grid: '#c7cfdb', txt: '#536177', empty: '#536177', threshold: '#a55b16', thi: '#14695b' }
+    : { grid: '#46546a', txt: '#b4c1d3', empty: '#b4c1d3', threshold: '#f5cc91', thi: '#8de1cd' };
 }
 
 // ---------- WIB CLOCK ----------

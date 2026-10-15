@@ -1,6 +1,10 @@
-# SmartCow — preview UI lokal
+# SmartCow — Barn Console & preview lokal
 
-Konsep **Field Notes**: ivory/sage, navigasi hijau hutan, ilustrasi kandang orisinal (SVG lokal), kartu iklim, status sprinkler, titik sensor, dan pengaturan bernomor. Tersedia tema terang/gelap, drawer ponsel, riwayat sensor, dan aktivitas sprinkler.
+UI terbaru **Barn Console (v40)**: neumorphism dengan permukaan abu kebiruan yang timbul, area pembacaan/input cekung, navigasi arang, dan aksen fungsional **jingga / suhu**, **biru / kelembapan**, **hijau / THI**. Panel relay dibuat kontras; ringkasan sistem menggantikan banner promosi besar. Label serta keterangan tidak lagi dibungkus kotak bertumpuk. Tersedia tema terang/gelap, drawer ponsel, riwayat sensor, aktivitas sprinkler, dan ilustrasi skema kandang orisinal (SVG lokal, bukan posisi sensor sebenarnya).
+
+Teks dan kontrol tidak bergantung pada bayangan/warna saja: fokus keyboard terlihat, input mempunyai batas, status memakai teks, dan pilihan aktif memakai warna serta indikator radio. Mode forced-colors diberi batas/outline pengganti bayangan. Animasi sidebar/popup dan preferensi reduced motion tetap dipertahankan. Min/maks diberi label **Titik terendah / Titik tertinggi** dan keterangan pembacaan terkini, bukan rekor harian.
+
+Catatan versi sebelumnya (**Field Notes v36–v39**):
 
 Revisi keterbacaan: teks informasi utama 13–16 px, label ringkasan 16–17 px, serta kotak terpisah untuk label, nilai, status, min/max/ambang, dan keterangan. Layout ponsel mengalir ke baris baru alih-alih mengecilkan teks. Sapaan, nama akun, dan avatar otomatis mengikuti bagian email **sebelum `@`**, tanpa menyimpan profil tambahan atau mengubah Firebase. Bila email tidak tersedia, nama cadangannya **Pengelola**.
 
@@ -48,6 +52,8 @@ Revisi v38 (motion/pemulihan sesi tanpa login flash) disetujui untuk langsung pu
 
 Revisi v39 (ambang hanya untuk dasar kontrol tersimpan) mengikuti persetujuan langsung push dan deploy. Arsip v38: `smartcow-v38-sebelum-ambang-terpilih-20261014-104938.zip`.
 
+Revisi v40 (Barn Console / neumorphism) disetujui untuk langsung push dan deploy pada 15 Oktober 2026. Arsip v39 tersedia lokal: `smartcow-v39-sebelum-neumorphism-20261015-192844.zip`. Hanya HTML, CSS, warna grafik, ilustrasi, dokumentasi, dan tes UI yang berubah. Perhitungan THI, konfigurasi/profil tersimpan vs draft, kontrol manual/otomatis, Firebase Auth/RTDB, aturan database, dan firmware tidak diubah.
+
 Backup sebelum revisi final/publikasi tersedia lokal di `F:\apaelah\TUGAS\smt5\IoT\web projek IoT_Backup\smartcow-sebelum-deploy-20261013-121706`: snapshot lengkap proyek dan arsip commit lama `dcf8657`. Snapshot lokal mengandung kredensial privat; jangan unggah folder backup.
 
 ## Tes lokal
@@ -56,4 +62,4 @@ Backup sebelum revisi final/publikasi tersedia lokal di `F:\apaelah\TUGAS\smt5\I
 node --test test/core.test.js test/telemetry.test.js test/control.test.js test/preview.test.js test/ui-threshold.test.js
 ```
 
-Tes preview memeriksa dashboard tersembunyi sejak HTML, ID elemen, ilustrasi mandiri, dan server lokal yang menolak akses ke firmware/konfigurasi privat serta request tulis. Tes UI ambang menjalankan fungsi render asli untuk memeriksa dasar tersimpan/draft, nilai pengguna, monitoring netral, data hilang, serta garis grafik. Tes THI dan kebijakan kontrol yang sudah ada tetap dipertahankan.
+Tes preview memeriksa dashboard tersembunyi sejak HTML, ID elemen, ilustrasi mandiri/versioning, label snapshot, serta server lokal yang menolak akses ke firmware/konfigurasi privat dan request tulis. Tes UI ambang menjalankan fungsi render asli untuk memeriksa dasar tersimpan/draft, nilai pengguna, monitoring netral, data hilang, serta garis grafik. Tes THI dan kebijakan kontrol yang sudah ada tetap dipertahankan. QA browser memakai Firebase mock (tanpa kontrol produksi): 320–1920 px, tema terang/gelap, sidebar, popup sensor, refresh sesi, draft/save/failure/retry, serta pemeriksaan kontras teks utama minimum 4,5:1. Pemeriksaan SDK asli tidak login dan tidak menulis ke RTDB.

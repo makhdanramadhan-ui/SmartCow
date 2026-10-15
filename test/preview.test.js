@@ -75,7 +75,26 @@ test('local illustration is self-contained and contains no script or remote reso
   const svg = fs.readFileSync(path.join(root, 'assets/farm-scene.svg'), 'utf8');
   assert.match(svg, /<svg /);
   assert.doesNotMatch(svg, /<script\b|<foreignObject\b|(?:href|src)\s*=\s*["']https?:/i);
-  assert.match(html, /src="assets\/farm-scene.svg"/);
+  assert.match(html, /src="assets\/farm-scene.svg\?v=40"/);
+});
+
+test('Barn Console keeps depth selective, snapshot labels explicit and release assets versioned', () => {
+  const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
+  assert.match(css, /--shadow:[^;]*, -9px -9px/);
+  assert.match(css, /--inset: inset/);
+  assert.match(css, /:focus-visible\s*\{\s*outline: 3px solid/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.match(html, /Titik terendah/);
+  assert.match(html, /Titik tertinggi/);
+  assert.match(html, /Min\/maks antar titik · pembacaan terkini/);
+  assert.doesNotMatch(html, /Kenali iklimnya|MINDFUL CARE|greeting-leaf/);
+  const hero = html.match(/<section class="farm-hero"[\s\S]*?<\/section>/)?.[0];
+  assert.match(hero, /Kandang utama/);
+  assert.match(hero, /id="heroHealth"/);
+  assert.match(hero, /data-sensors="temperature"/);
+  for (const url of [...html.matchAll(/(?:src|href)="((?:js|css)\/[^\"]+)"/g)].map(m => m[1])) {
+    assert.match(url, /\?v=40$/);
+  }
 });
 
 test('preview HTTP server serves only runtime assets and refuses writes/private paths', async t => {
@@ -99,7 +118,7 @@ test('preview HTTP server serves only runtime assets and refuses writes/private 
   assert.equal(page.headers.get('cache-control'), 'no-store');
   assert.match(await page.text(), /id="appShell" class="app-shell" hidden inert/);
   assert.equal((await fetch(origin + '/assets/farm-scene.svg')).status, 200);
-  assert.equal((await fetch(origin + '/js/app.js?v=39')).status, 200);
+  assert.equal((await fetch(origin + '/js/app.js?v=40')).status, 200);
   const head = await fetch(origin + '/index.html', { method: 'HEAD' });
   assert.equal(head.status, 200); assert.equal(await head.text(), '');
   for (const name of ['/.git/config', '/js/firebase-config.js', '/database.rules.json',
