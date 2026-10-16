@@ -2,6 +2,7 @@
 :root, :root[data-theme="light"] {
   color-scheme: light;
   --bg: #e9edf3; --card: #e9edf3; --card2: #e0e6ee; --line: #bdc6d3;
+  --account-surface: #f6f8fc;
   --txt: #222e40; --muted: #536177; --green: #14695b; --red: #b33140;
   --amber: #935214; --blue: #205dc0; --cyan: #205dc0;
   --positive-bg: #d7eae4; --positive-txt: #146452; --warning-bg: #f5e3c5; --warning-txt: #854910;
@@ -15,6 +16,7 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #252d3a; --card: #252d3a; --card2: #202734; --line: #526176;
+  --account-surface: #323e50;
   --txt: #edf2fa; --muted: #b4c1d3; --green: #7edac4; --red: #ffa1ae;
   --amber: #efc183; --blue: #9abfff; --cyan: #9abfff;
   --positive-bg: #203f3b; --positive-txt: #8de1cd; --warning-bg: #493923; --warning-txt: #f5cc91;
@@ -226,7 +228,7 @@ button, a, input, select { touch-action: manipulation; }
 .admin-directory-head p.hint { font-size: 13px; margin: 5px 0 0; }
 .admin-count { flex: none; padding: 8px 12px; border: 1px solid var(--edge); border-radius: 9px; color: var(--muted); box-shadow: var(--inset); font-size: 13px; font-variant-numeric: tabular-nums; }
 .user-list { display: grid; gap: 14px; }
-.user-row { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.user-row { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--account-surface); }
 .user-heading { display: flex; align-items: center; gap: 13px; min-width: 0; }
 .user-avatar { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border: 1px solid var(--edge); border-radius: 14px; background: var(--card); color: var(--muted); box-shadow: var(--inset); font-size: 15px; font-weight: 650; }
 .user-row-admin .user-avatar { color: var(--cool-txt); background: var(--cool-bg); box-shadow: none; border-color: transparent; }

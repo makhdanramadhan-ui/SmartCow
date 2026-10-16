@@ -102,7 +102,7 @@ test('Barn Console keeps depth selective, snapshot labels explicit and release a
   assert.doesNotMatch(hero,/SISTEM \/ 01|ESP32|relay|Lihat titik sensor|hero-kicker/);
   assert.doesNotMatch(hero, /id="heroHealth"|data-sensors=/);
   for (const url of [...html.matchAll(/(?:src|href)="((?:js|css)\/[^\"]+)"/g)].map(m => m[1])) {
-    const version = /^(?:css\/|js\/admin\.js)/.test(url) ? 45 : /^js\/(?:access|firebase)\.js/.test(url) ? 44 : 42;
+    const version = /^css\//.test(url) ? 47 : /^js\/admin\.js/.test(url) ? 45 : /^js\/(?:access|firebase)\.js/.test(url) ? 44 : 42;
     assert.ok(url.endsWith(`?v=${version}`), `unexpected asset version: ${url}`);
   }
 });
@@ -156,6 +156,21 @@ test('current account has a read-only card above the account directory in the sa
   const admin = fs.readFileSync(path.join(root, 'js/admin.js'), 'utf8');
   assert.match(admin, /const account=allowed\(\)\?window\.smartcowAccess:null/);
   assert.match(admin, /syncCurrentAccount\(\);/);
+});
+
+test('account cards have a distinct theme-aware surface from the directory parent', () => {
+  const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
+  const light = css.match(/:root, :root\[data-theme="light"\] \{([^}]+)\}/)?.[1];
+  const dark = css.match(/:root\[data-theme="dark"\] \{([^}]+)\}/)?.[1];
+  for (const theme of [light, dark]) {
+    assert.ok(theme);
+    const parent = theme.match(/--card: (#[a-f\d]{6});/i)?.[1];
+    const account = theme.match(/--account-surface: (#[a-f\d]{6});/i)?.[1];
+    assert.ok(parent && account);
+    assert.notEqual(parent, account);
+  }
+  assert.match(css, /\.user-row \{[^}]*background: var\(--account-surface\);/);
+  assert.doesNotMatch(css, /\.admin-directory \{[^}]*background: var\(--account-surface\)/);
 });
 
 test('configuration precedes a full-width chart with three labelled responsive control groups', () => {
